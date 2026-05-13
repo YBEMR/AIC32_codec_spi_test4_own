@@ -287,13 +287,77 @@ int16_t amr_encode_wav(const uint8_t *wav_data, uint32_t wav_len,
     return 0;  // Success
 }
 
+int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
+                    uint8_t *amr_buf, uint16_t amr_buf_size,
+                    uint16_t *amr_len)
+{
+    char *mode_arg;
+    enum Mode mode_val;
+    int16_t pcm[160];
+    struct amr_param_frame frame;
+    uint8_t out_bytes[AMR_IETF_MAX_PL] = {0};
+    int16_t dtx = 0, vad2 = 0;
+    uint16_t buf_offset = 0;
+    uint32_t sample_offset = 0;
+    unsigned nbytes;
+    int16_t i;
+
+    extern struct amr_encoder_state __encode_st;
+
+    mode_arg = "MR515";
+    vad2 = 1;
+    dtx = 1;
+
+    if (__grok_mode_name(mode_arg, &mode_val) < 0) {
+        return -1;
+    }
+
+    __amr_encoder_create(&__encode_st, dtx, vad2);
+
+    memset(amr_buf, 0, amr_buf_size);
+    memcpy(amr_buf, amr_file_header_magic, AMR_IETF_HDR_LEN);
+    buf_offset = AMR_IETF_HDR_LEN;
+
+    while (sample_offset < sample_count) {
+        uint32_t remain = sample_count - sample_offset;
+        if (remain >= 160U) {
+            memcpy(pcm, &pcm_data[sample_offset], 160U * sizeof(int16_t));
+            sample_offset += 160U;
+        } else {
+            for (i = 0; i < (int16_t)remain; i++) {
+                pcm[i] = pcm_data[sample_offset + (uint32_t)i];
+            }
+            while (i < 160) {
+                pcm[i++] = 0;
+            }
+            sample_offset = sample_count;
+        }
+
+        amr_encode_frame(&__encode_st, mode_val, pcm, &frame);
+        nbytes = amr_frame_to_ietf(&frame, out_bytes);
+
+        if (buf_offset + nbytes > amr_buf_size) {
+            nbytes = amr_buf_size - buf_offset;
+            memcpy(amr_buf + buf_offset, out_bytes, nbytes);
+            buf_offset += nbytes;
+            break;
+        }
+
+        memcpy(amr_buf + buf_offset, out_bytes, nbytes);
+        buf_offset += nbytes;
+    }
+
+    *amr_len = buf_offset;
+    return 0;
+}
+
 
 void __amr_decoder_create(struct amr_decoder_state *st)
 {
     amr_decoder_reset(st);
 }
 
-void __write_pcm_to_wav(uint8_t **out_buf, const int16_t *pcm, uint16_t* data_length)
+void __write_pcm_to_wav(uint8_t **out_buf, const int16_t *pcm, uint32_t *data_length)
 {
     unsigned n;
 
@@ -323,8 +387,9 @@ void __write_int16(uint8_t **data_buf, int16_t value) {
     *(*data_buf)++ = ((value >>  8) & 0xff);
 }
 
-void __write_header(uint8_t *ptr_data_buf, int16_t length) {
-    int16_t bytes_per_frame, bytes_per_sec;
+void __write_header(uint8_t *ptr_data_buf, uint32_t length) {
+    uint16_t bytes_per_frame;
+    uint32_t bytes_per_sec;
     __write_string(&ptr_data_buf, "RIFF");
     __write_int32(&ptr_data_buf, 4 + 8 + 16 + 8 + length);
     __write_string(&ptr_data_buf, "WAVE");
@@ -356,8 +421,8 @@ void __write_header(uint8_t *ptr_data_buf, int16_t length) {
  */
 
 int16_t amr_decode_wav(const uint8_t *amr_data, uint16_t amr_len,
-                  uint8_t *wav_ptr, uint16_t wav_buf_size,
-                  uint16_t *wav_len)
+                  uint8_t *wav_ptr, uint32_t wav_buf_size,
+                  uint32_t *wav_len)
 {
     int16_t pcm[160];
     struct amr_param_frame frame;
@@ -381,7 +446,7 @@ int16_t amr_decode_wav(const uint8_t *amr_data, uint16_t amr_len,
     __amr_decoder_create(&__decode_st);
 
     uint8_t *ptr_data = wav_ptr+44;
-    uint16_t data_length = 0;
+    uint32_t data_length = 0;
     for (;;) {
         if(buf_offset >= amr_len)
             break;

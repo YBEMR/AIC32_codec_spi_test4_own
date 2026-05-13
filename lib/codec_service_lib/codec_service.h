@@ -10,9 +10,9 @@
 // #define CODEC_SERVICE_WAV_BUF_SIZE     60000U
 // #define CODEC_SERVICE_SPI_PACKET_SIZE  1500U
 
-#define CODEC_SERVICE_MAX_RECORD_CNT   50000U
+#define CODEC_SERVICE_MAX_RECORD_CNT   80000U
 #define CODEC_SERVICE_AMR_BUF_SIZE     1500U
-#define CODEC_SERVICE_WAV_BUF_SIZE     70000U
+#define CODEC_SERVICE_WAV_BUF_SIZE     100000U
 #define CODEC_SERVICE_SPI_PACKET_SIZE  1500U
 
 #define CODEC_SERVICE_OK                 0
@@ -29,7 +29,7 @@
 void codec_service_reset(void);
 void codec_service_start_record(void);
 int16_t codec_service_record_sample(int16_t sample);
-Uint16 codec_service_get_record_count(void);
+Uint32 codec_service_get_record_count(void);
 
 int16_t codec_service_encode_recorded(void);
 int16_t codec_service_spi_exchange_first(void);
@@ -39,8 +39,8 @@ int16_t codec_service_get_play_sample(Uint16 *sample);
 
 Uint16 codec_service_get_amr_len(void);
 Uint16 codec_service_get_received_amr_len(void);
-Uint16 codec_service_get_wav_len(void);
-Uint16 codec_service_get_play_offset(void);
+Uint32 codec_service_get_wav_len(void);
+Uint32 codec_service_get_play_offset(void);
 
 const uint8_t *codec_service_get_amr_buffer(void);
 const uint8_t *codec_service_get_spi_rx_buffer(void);

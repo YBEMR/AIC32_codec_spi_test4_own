@@ -95,8 +95,6 @@ int16_t main(int16_t argc, char **argv)
         delay();
 
         if (current_state == APP_STATE_ENCODE) {
-            // 防止在编码过程中被误触发进入下一步，导致状态机混乱
-            spi_ready_flag = 0;
             UARTa_SendString("### Starting encoding ###\r\n");
             UARTa_SendStringAndNumber("Recorded samples: ", codec_service_get_record_count(), "\r\n");
             // STEP 1
@@ -109,6 +107,8 @@ int16_t main(int16_t argc, char **argv)
                 current_state = APP_STATE_IDLE;
             }
         } else if (current_state == APP_STATE_AMR_READY) {
+            // 防止被误触发进入下一步，导致状态机混乱
+            spi_ready_flag = 0;
             UARTa_SendString("### Starting SPI exchange one ###\r\n");
             // STEP 2
             result = codec_service_spi_exchange_first();
@@ -218,6 +218,7 @@ interrupt void TIM0_IRQn(void)
 
 interrupt void SPI_READY_IRQn(void)
 {
+    UARTa_SendString("nnnnnnnnnnnnnnnnn\r\n");
     spi_ready_flag = 1;
     PieCtrlRegs.PIEACK.bit.ACK12 = 1;
 }

@@ -33,6 +33,17 @@ int16_t amr_encode_wav(const uint8_t *wav_data, uint32_t wav_len,
                   uint16_t *amr_len);
 
 /*
+ * pcm_data: PCM16 sample data
+ * sample_count: number of PCM16 samples
+ * amr_buf: buffer for encoded AMR data
+ * amr_buf_size: maximum size of encoded AMR data buffer
+ * amr_len: actual length of encoded AMR data
+ */
+int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
+                    uint8_t *amr_buf, uint16_t amr_buf_size,
+                    uint16_t *amr_len);
+
+/*
  * amr_data: AMR data
  * amr_len: length of AMR data in bytes
  * wav_ptr: buffer for decoded WAV data
@@ -40,16 +51,16 @@ int16_t amr_encode_wav(const uint8_t *wav_data, uint32_t wav_len,
  * wav_len: actual length of decoded WAV data
  */
 int16_t amr_decode_wav(const uint8_t *amr_data, uint16_t amr_len,
-                  uint8_t *wav_ptr, uint16_t wav_buf_size,
-                  uint16_t *wav_len);
+                  uint8_t *wav_ptr, uint32_t wav_buf_size,
+                  uint32_t *wav_len);
 
 void convert_8bit_to_16bit(const uint8_t *src, uint16_t *dst, uint32_t num_bytes);
 void __amr_decoder_create(struct amr_decoder_state *st);
-void __write_pcm_to_wav(uint8_t **out_buf, const int16_t *pcm, uint16_t* data_length);
+void __write_pcm_to_wav(uint8_t **out_buf, const int16_t *pcm, uint32_t *data_length);
 void __write_string(uint8_t **data_buf, const char *str);
 void __write_int32(uint8_t **data_buf, int32_t value);
 void __write_int16(uint8_t **data_buf, int16_t value);
-void __write_header(uint8_t *ptr_data_buf, int16_t length);
+void __write_header(uint8_t *ptr_data_buf, uint32_t length);
 
 
 

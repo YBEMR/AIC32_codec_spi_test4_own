@@ -51,7 +51,7 @@ void spi_ready_init(PINT isr)
     PieCtrlRegs.PIEIER12.bit.INTx1 = 1;
 
     // Trigger mode
-    XIntruptRegs.XINT3CR.bit.POLARITY = 3;      // double edge
+    XIntruptRegs.XINT3CR.bit.POLARITY = 1;      // 1：rising edge, 0：falling edge，3：both edges
     XIntruptRegs.XINT3CR.bit.ENABLE = 1;
 
     // Enable CPU INT12

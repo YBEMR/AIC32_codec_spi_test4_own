@@ -1,0 +1,14 @@
+build_ramopt\audio_lib\gsm-codec-lib-r3\libtwamr\prmno.obj: audio_lib/gsm-codec-lib-r3/libtwamr/prmno.c
+build_ramopt\audio_lib\gsm-codec-lib-r3\libtwamr\prmno.obj: audio_lib\gsm-codec-lib-r3\libtwamr\typedef.h
+build_ramopt\audio_lib\gsm-codec-lib-r3\libtwamr\prmno.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/stdint.h
+build_ramopt\audio_lib\gsm-codec-lib-r3\libtwamr\prmno.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/_ti_config.h
+build_ramopt\audio_lib\gsm-codec-lib-r3\libtwamr\prmno.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/linkage.h
+build_ramopt\audio_lib\gsm-codec-lib-r3\libtwamr\prmno.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/_stdint40.h
+build_ramopt\audio_lib\gsm-codec-lib-r3\libtwamr\prmno.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/sys/stdint.h
+build_ramopt\audio_lib\gsm-codec-lib-r3\libtwamr\prmno.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/sys/cdefs.h
+build_ramopt\audio_lib\gsm-codec-lib-r3\libtwamr\prmno.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/sys/_types.h
+build_ramopt\audio_lib\gsm-codec-lib-r3\libtwamr\prmno.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/machine/_types.h
+build_ramopt\audio_lib\gsm-codec-lib-r3\libtwamr\prmno.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/machine/_stdint.h
+build_ramopt\audio_lib\gsm-codec-lib-r3\libtwamr\prmno.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/sys/_stdint.h
+build_ramopt\audio_lib\gsm-codec-lib-r3\libtwamr\prmno.obj: ../include/namespace.h
+build_ramopt\audio_lib\gsm-codec-lib-r3\libtwamr\prmno.obj: audio_lib\gsm-codec-lib-r3\libtwamr\int_defs.h
