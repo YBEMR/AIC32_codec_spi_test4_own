@@ -1,0 +1,53 @@
+Dependency graph
+================
+
+The complete Themyscira GSM codec libraries & utilities package as presented
+here consists of two principal parts:
+
+Division 1: libgsmefr, libgsmfr2 and libtwamr, the set of C code libraries
+intended to be usable by other software;
+
+Division 2: various command line utilities that were developed under the
+umbrella of this project and are being released accordingly.
+
+Division 2 components have a compile-time dependency on Division 1 (most of
+these Division 2 command line utilities link with the libraries), but not the
+other way around: none of the core libraries have any dependency on any other
+part of this package, not even on each other.
+
+Previous versions of gsm-codec-lib suite had a dependency on libgsm, the
+original GSM 06.10 implementation library from 1990s, and our suite was
+originally architectured as extending and building on top of libgsm.  However,
+this dependency has now been eliminated, and our new GSM codec libraries and
+utilities suite is now completely independent from historical libgsm.
+
+Compiling and installing Themyscira libraries and utilities
+===========================================================
+
+The configuration and build process has been fully revamped since previous
+versions:
+
+* You now need to run ./configure before running 'make' - however, please note
+  that our ./configure script is hand-coded, not Autotools/autohell, hence
+  there is no autoreconf nonsense involved.
+
+* When you run ./configure, you get the opportunity to either leave CC=, CFLAGS=
+  and the install prefix at their default values, or change them to your own
+  preferences.
+
+* There are no more mandatory install-lib and install-utils targets, instead
+  you get standard 'make install' that installs everything into whichever
+  prefix you chose at configure time.  (The ability to install only Division 1
+  components with 'make install-lib' or only Division 2 components with
+  'make install-utils' is still available, but it is now an experts-only
+  option: if you don't see yourself needing this type of split install, then
+  you don't need it.)
+
+The default install prefix is /usr/local, following the general standard for
+software packages and configure scripts.  To change this install location, pass
+the standard --prefix=/wherever option to ./configure script.  In addition to
+--prefix, our configure script accepts --exec-prefix, --bindir, --includedir
+and --libdir options, following the common standard.
+
+The default compilation settings are CC=gcc and CFLAGS=-O2; to change them,
+pass CC=my-whatever-cc and/or CFLAGS="-fwhatever-flags" to configure.

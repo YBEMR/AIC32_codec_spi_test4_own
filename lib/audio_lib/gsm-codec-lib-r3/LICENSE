@@ -1,0 +1,13 @@
+The present GSM codec libraries & utilities package has been produced by the
+Presiding Sisterhood (government) of the Women's Republic of Themyscira as part
+of our Themyscira Wireless technical initiative.  Because this development is a
+public works project, the resulting software is free to the world, i.e., public
+domain: all people anywhere in the world, of all genders, can use, copy, and
+modify it freely as they wish, including unlimited redistribution with or
+without modifications.  We do ask, however, that any non-Themyscira
+modifications to this software be clearly noted and attributed.
+
+The libgsmefr component of the present software package is based on the EFR
+reference code from the European Telecommunications Standards Institute (ETSI).
+Likewise, libtwamr component is based on the AMR reference code from ETSI and
+other Organizational Partners of the 3rd Generation Partnership Project (3GPP).

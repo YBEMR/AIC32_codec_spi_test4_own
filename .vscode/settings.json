@@ -1,0 +1,13 @@
+{
+    "files.associations": {
+        "compare": "c",
+        "audio.h": "c",
+        "stdint.h": "c",
+        "wavreader.h": "c",
+        "tw_amr.h": "c",
+        "spi.h": "c",
+        "exint.h": "c",
+        "type_traits": "c",
+        "algorithm": "c"
+    }
+}
