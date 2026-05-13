@@ -295,9 +295,9 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
                     uint8_t *amr_buf, uint16_t amr_buf_size,
                     uint16_t *amr_len)
 {
-    char *mode_arg;
-    enum Mode mode_val;
-    int16_t pcm[160];
+    enum Mode mode_val = MR515;
+    int16_t pcm_tail[160];
+    const int16_t *pcm_frame;
     struct amr_param_frame frame;
     uint8_t out_bytes[AMR_IETF_MAX_PL] = {0};
     int16_t dtx = 0, vad2 = 0;
@@ -308,36 +308,31 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
 
     extern struct amr_encoder_state __encode_st;
 
-    mode_arg = "MR515";
-    vad2 = 1;
-    dtx = 1;
-
-    if (__grok_mode_name(mode_arg, &mode_val) < 0) {
-        return -1;
-    }
+    vad2 = 0;
+    dtx = 0;
 
     __amr_encoder_create(&__encode_st, dtx, vad2);
 
-    memset(amr_buf, 0, amr_buf_size);
     memcpy(amr_buf, amr_file_header_magic, AMR_IETF_HDR_LEN);
     buf_offset = AMR_IETF_HDR_LEN;
 
     while (sample_offset < sample_count) {
         uint32_t remain = sample_count - sample_offset;
         if (remain >= 160U) {
-            memcpy(pcm, &pcm_data[sample_offset], 160U * sizeof(int16_t));
+            pcm_frame = &pcm_data[sample_offset];
             sample_offset += 160U;
         } else {
             for (i = 0; i < (int16_t)remain; i++) {
-                pcm[i] = pcm_data[sample_offset + (uint32_t)i];
+                pcm_tail[i] = pcm_data[sample_offset + (uint32_t)i];
             }
             while (i < 160) {
-                pcm[i++] = 0;
+                pcm_tail[i++] = 0;
             }
+            pcm_frame = pcm_tail;
             sample_offset = sample_count;
         }
 
-        amr_encode_frame(&__encode_st, mode_val, pcm, &frame);
+        amr_encode_frame(&__encode_st, mode_val, pcm_frame, &frame);
         nbytes = amr_frame_to_ietf(&frame, out_bytes);
 
         if (buf_offset + nbytes > amr_buf_size) {
@@ -438,6 +433,12 @@ int16_t amr_decode_wav(const uint8_t *amr_data, uint16_t amr_len,
 
     extern struct amr_decoder_state __decode_st;
 
+    if (wav_buf_size < 44U) {
+        UARTa_SendString("error: wav buffer too small\n");
+        *wav_len = 0;
+        return -1;
+    }
+
     /* Decoding */
     if(memcmp(amr_data, amr_file_header_magic, AMR_IETF_HDR_LEN)){
         UARTa_SendString("file is not in IETF AMR format\n");
@@ -471,12 +472,13 @@ int16_t amr_decode_wav(const uint8_t *amr_data, uint16_t amr_len,
         memcpy(out_bytes+1, &amr_data[buf_offset], rc*sizeof(uint8_t));
         buf_offset += rc;
 
+        if((data_length + 44U + 320U) > wav_buf_size){
+            UARTa_SendString("warning: wav buffer full, decode truncated\n");
+            break;
+        }
+
         amr_frame_from_ietf(out_bytes, &frame);
         amr_decode_frame(&__decode_st, &frame, pcm);
-        if((data_length + 44 + 320) > wav_buf_size){
-            UARTa_SendString("error: wav buffer overflow\n");
-            return -1;
-        }
         __write_pcm_to_wav(&ptr_data, pcm, &data_length);
     }
     ptr_data = wav_ptr;

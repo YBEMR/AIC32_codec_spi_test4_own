@@ -136,12 +136,17 @@ SECTIONS
    .pinit              : > FLASHC,     PAGE = 0
    .text               : >> FLASHG | FLASHF | FLASHE   PAGE = 0
    codestart           : > BEGIN       PAGE = 0
-   ramfuncs            : LOAD = FLASHD, 
-                         RUN = RAML0, 
-                         LOAD_START(_RamfuncsLoadStart),
-                         LOAD_END(_RamfuncsLoadEnd),
-                         RUN_START(_RamfuncsRunStart),
-                         PAGE = 0
+   ramfuncs            :
+                         {
+                            *(ramfuncs)
+                            audio_lib.lib<cod_amr.obj>(.text)
+                            audio_lib.lib<pitch_fr.obj>(.text)
+                         } LOAD = FLASHD,
+                           RUN = RAML0,
+                           LOAD_START(_RamfuncsLoadStart),
+                           LOAD_END(_RamfuncsLoadEnd),
+                           RUN_START(_RamfuncsRunStart),
+                           PAGE = 0
 
    csmpasswds          : > CSM_PWL     PAGE = 0
    csm_rsvd            : > CSM_RSVD    PAGE = 0

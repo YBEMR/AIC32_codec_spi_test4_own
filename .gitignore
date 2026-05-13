@@ -1,0 +1,32 @@
+# DSP build outputs
+/build/
+/lib/build/
+/lib/build_*/
+/lib/*_lib/Debug/
+
+# Generated release libraries
+/lib/release/lib/
+/student_release/lib/
+
+# TI C2000 intermediate and output files
+*.obj
+*.d_raw
+*.map
+*.out
+*_linkInfo.xml
+*.arcmd
+*.lib
+
+# Keep checked-in vendor/static libraries required by the app link step.
+!source/IQmath_fpu32.lib
+
+# Hex/text build exports
+*.txt
+!targetConfigs/readme.txt
+!lib/audio_lib/gsm-codec-lib-r3/.hg_archival.txt
+!lib/codec_service_lib/codec_service copy.txt
+
+# Local IDE/system files
+.vscode/*.log
+.DS_Store
+Thumbs.db

@@ -29,8 +29,11 @@ static volatile Uint16 key_decode_pressed_flag = 0;
 static volatile Uint32 key_decode_press_time = 0;
 static volatile Uint16 spi_ready_flag = 0;
 static volatile Uint32 tick_count = 0;
+static volatile Uint16 mcbsp_word_phase = 0;
+static volatile Uint16 play_sample_hold = 0;
 
 #define KEY_DEBOUNCE_MS 260U
+#define APP_MONO_RECORD_WORD_SELECT 0U
 
 static void init_zone7(void);
 static void delay(void);
@@ -167,6 +170,8 @@ int16_t main(int16_t argc, char **argv)
             UARTa_SendStringAndNumber("Decode time(ms): ", decode_elapsed_ms, "\r\n");
             if (result == CODEC_SERVICE_OK) {
                 UARTa_SendStringAndNumber("Decoding successful, WAV length: ", codec_service_get_wav_len(), "\r\n");
+                mcbsp_word_phase = 0;
+                play_sample_hold = 0;
                 current_state = APP_STATE_PLAY;
             } else {
                 UARTa_SendStringAndNumber("Decoding failed: ", result, "\r\n");
@@ -203,9 +208,12 @@ interrupt void TIM0_IRQn(void)
     if (key_encode_pressed_flag && (tick_count - key_encode_press_time >= KEY_DEBOUNCE_MS / 10U)) {
         if (current_state == APP_STATE_IDLE) {
             codec_service_start_record();
+            mcbsp_word_phase = 0;
+            play_sample_hold = 0;
             current_state = APP_STATE_RECORD;
             UARTa_SendString("Record start.\r\n");
         } else if (current_state == APP_STATE_RECORD) {
+            mcbsp_word_phase = 0;
             current_state = APP_STATE_ENCODE;
             UARTa_SendString("Record stop.\r\n");
         }
@@ -238,20 +246,30 @@ interrupt void SPI_READY_IRQn(void)
 interrupt void ISRMcbspSend(void)
 {
     Uint16 sample;
+    Uint16 word_phase;
     int16_t temp;
+
+    word_phase = mcbsp_word_phase;
+    mcbsp_word_phase ^= 1U;
 
     temp = McbspaRegs.DRR1.all;
     if (current_state == APP_STATE_RECORD) {
-        codec_service_record_sample(temp);
+        if (word_phase == APP_MONO_RECORD_WORD_SELECT) {
+            codec_service_record_sample(temp);
+        }
         McbspaRegs.DXR1.all = temp;
     } else if (current_state == APP_STATE_PLAY) {
-        if (codec_service_get_play_sample(&sample) == CODEC_SERVICE_PLAY_DONE) {
-            UARTa_SendString("Play complete.\r\n");
-            current_state = APP_STATE_IDLE;
-            McbspaRegs.DXR1.all = 0;
-        } else {
-            McbspaRegs.DXR1.all = sample;
+        if (word_phase == 0U) {
+            if (codec_service_get_play_sample(&sample) == CODEC_SERVICE_PLAY_DONE) {
+                UARTa_SendString("Play complete.\r\n");
+                current_state = APP_STATE_IDLE;
+                play_sample_hold = 0;
+                mcbsp_word_phase = 0;
+            } else {
+                play_sample_hold = sample;
+            }
         }
+        McbspaRegs.DXR1.all = play_sample_hold;
     }
 
     PieCtrlRegs.PIEACK.all = 0x0020;

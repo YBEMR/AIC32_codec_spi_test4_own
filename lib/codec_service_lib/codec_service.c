@@ -1,7 +1,5 @@
 #include "codec_service.h"
 
-#include <string.h>
-
 #include "audio.h"
 #include "spi.h"
 
@@ -31,9 +29,6 @@ void codec_service_reset(void)
     received_amr_len = 0;
     wav_total_len = 0;
     play_offset = 44U;
-    memset(&codec_workbuf, 0, sizeof(codec_workbuf));
-    memset(amr_output_buffer, 0, sizeof(amr_output_buffer));
-    memset(spi_receive_buffer, 0, sizeof(spi_receive_buffer));
 }
 
 void codec_service_start_record(void)
@@ -43,9 +38,6 @@ void codec_service_start_record(void)
     received_amr_len = 0;
     wav_total_len = 0;
     play_offset = 44U;
-    memset(&codec_workbuf, 0, sizeof(codec_workbuf));
-    memset(amr_output_buffer, 0, sizeof(amr_output_buffer));
-    memset(spi_receive_buffer, 0, sizeof(spi_receive_buffer));
 }
 
 int16_t codec_service_record_sample(int16_t sample)
@@ -72,8 +64,6 @@ int16_t codec_service_encode_recorded(void)
         return CODEC_SERVICE_ERR_NO_RECORD;
     }
 
-    memset(amr_output_buffer, 0, sizeof(amr_output_buffer));
-
     result = amr_encode_pcm16(
             codec_workbuf.record_buf,
             record_count,
@@ -92,17 +82,14 @@ int16_t codec_service_encode_recorded(void)
 
 int16_t codec_service_spi_exchange_first(void)
 {
-    memset(spi_receive_buffer, 0, sizeof(spi_receive_buffer));
     spi_send_and_receive((const Uint16 *)amr_output_buffer,
                          (Uint16 *)spi_receive_buffer,
                          CODEC_SERVICE_SPI_PACKET_SIZE);
-    memset(spi_receive_buffer, 0, sizeof(spi_receive_buffer));
     return CODEC_SERVICE_OK;
 }
 
 int16_t codec_service_spi_exchange_second(void)
 {
-    memset(spi_receive_buffer, 0, sizeof(spi_receive_buffer));
     spi_send_and_receive((const Uint16 *)amr_output_buffer,
                          (Uint16 *)spi_receive_buffer,
                          CODEC_SERVICE_SPI_PACKET_SIZE);
@@ -132,7 +119,6 @@ int16_t codec_service_decode_received(void)
         return CODEC_SERVICE_ERR_NO_RECORD;
     }
 
-    memset(codec_workbuf.wav_output_buffer, 0, sizeof(codec_workbuf.wav_output_buffer));
     result = amr_decode_wav(&spi_receive_buffer[1],
                             received_amr_len,
                             codec_workbuf.wav_output_buffer,
@@ -156,10 +142,6 @@ int16_t codec_service_get_play_sample(Uint16 *sample)
     *sample = (Uint16)codec_workbuf.wav_output_buffer[play_offset] |
               ((Uint16)codec_workbuf.wav_output_buffer[play_offset + 1U] << 8);
     play_offset += 2U;
-
-    if (play_offset >= wav_total_len) {
-        return CODEC_SERVICE_PLAY_DONE;
-    }
 
     return CODEC_SERVICE_OK;
 }
