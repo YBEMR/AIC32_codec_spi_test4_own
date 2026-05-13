@@ -1,6 +1,9 @@
 #include "audio.h"
 #include <string.h>
 
+extern void UARTa_SendString(char *msg);
+extern void UARTa_SendStringAndNumber(char *msg1, int32 number, char *msg2);
+
 void I2CA_Init()
 {
    // Initialize I2C
@@ -337,10 +340,10 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
         nbytes = amr_frame_to_ietf(&frame, out_bytes);
 
         if (buf_offset + nbytes > amr_buf_size) {
-            nbytes = amr_buf_size - buf_offset;
-            memcpy(amr_buf + buf_offset, out_bytes, nbytes);
-            buf_offset += nbytes;
-            break;
+            UARTa_SendStringAndNumber("error: AMR buffer overflow, used=", buf_offset, "\r\n");
+            UARTa_SendStringAndNumber("error: AMR frame bytes needed=", nbytes, "\r\n");
+            *amr_len = buf_offset;
+            return -1;
         }
 
         memcpy(amr_buf + buf_offset, out_bytes, nbytes);

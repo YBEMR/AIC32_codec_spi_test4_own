@@ -1,0 +1,17 @@
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: audio_lib/gsm-codec-lib-r3/libtwamr/mac_32.c
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: ../include/namespace.h
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.h
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: audio_lib\gsm-codec-lib-r3\libtwamr\typedef.h
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/stdint.h
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/_ti_config.h
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/linkage.h
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/_stdint40.h
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/sys/stdint.h
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/sys/cdefs.h
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/sys/_types.h
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/machine/_types.h
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/machine/_stdint.h
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS/include/sys/_stdint.h
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: audio_lib\gsm-codec-lib-r3\libtwamr\basic_op.h
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: audio_lib\gsm-codec-lib-r3\libtwamr\oper_32b.h
+build_8192\audio_lib\gsm-codec-lib-r3\libtwamr\mac_32.obj: audio_lib\gsm-codec-lib-r3\libtwamr\no_count.h
