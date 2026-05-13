@@ -63,6 +63,7 @@ Uint32 codec_service_get_record_count(void)
     return record_count;
 }
 
+#pragma CODE_SECTION(codec_service_encode_recorded, "ramfuncs");
 int16_t codec_service_encode_recorded(void)
 {
     int16_t result;
@@ -122,6 +123,7 @@ int16_t codec_service_spi_exchange_second(void)
     return CODEC_SERVICE_OK;
 }
 
+#pragma CODE_SECTION(codec_service_decode_received, "ramfuncs");
 int16_t codec_service_decode_received(void)
 {
     int16_t result;

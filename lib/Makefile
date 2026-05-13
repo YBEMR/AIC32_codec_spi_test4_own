@@ -58,6 +58,17 @@ endif
 COMMON_FLAGS := -v28 -ml -mt --float_support=fpu32 --advice:performance=all -g --c99
 COMMON_FLAGS += --diag_warning=225 --diag_wrap=off --display_error_number --abi=coffabi
 
+OPT_SPEED_FLAGS := --opt_level=2 --opt_for_speed=5
+
+AUDIO_FLAGS := $(COMMON_FLAGS) $(OPT_SPEED_FLAGS)
+CODEC_SERVICE_FLAGS := $(COMMON_FLAGS) $(OPT_SPEED_FLAGS)
+SPI_FLAGS := $(COMMON_FLAGS)
+UARTA_FLAGS := $(COMMON_FLAGS)
+TIMER0_FLAGS := $(COMMON_FLAGS)
+EXINT_FLAGS := $(COMMON_FLAGS)
+LED_FLAGS := $(COMMON_FLAGS)
+KEY_FLAGS := $(COMMON_FLAGS)
+
 BASE_INCLUDES := --include_path="$(CG_TOOL_ROOT)/include"
 BASE_INCLUDES += --include_path="../include"
 BASE_INCLUDES += --include_path="$(DSP_COMMON_INC)"
@@ -137,7 +148,7 @@ all: $(LIBS) sync
 define compile-c
 	@$(call make-dir,$(@D))
 	@echo Building file: "$<"
-	"$(CL2000)" $(COMMON_FLAGS) $($(1)_INCLUDES) --preproc_with_compile --preproc_dependency="$(@:.obj=.d_raw)" --obj_directory="$(call winpath,$(@D))" "$<"
+	"$(CL2000)" $($(1)_FLAGS) $($(1)_INCLUDES) --preproc_with_compile --preproc_dependency="$(@:.obj=.d_raw)" --obj_directory="$(call winpath,$(@D))" "$<"
 	@echo Finished building: "$<"
 	@echo.
 endef

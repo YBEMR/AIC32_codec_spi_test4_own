@@ -95,10 +95,16 @@ int16_t main(int16_t argc, char **argv)
         delay();
 
         if (current_state == APP_STATE_ENCODE) {
+            Uint32 encode_start_tick;
+            Uint32 encode_elapsed_ms;
+
             UARTa_SendString("### Starting encoding ###\r\n");
             UARTa_SendStringAndNumber("Recorded samples: ", codec_service_get_record_count(), "\r\n");
             // STEP 1
+            encode_start_tick = tick_count;
             result = codec_service_encode_recorded();
+            encode_elapsed_ms = (tick_count - encode_start_tick) * 10UL;
+            UARTa_SendStringAndNumber("Encode time(ms): ", encode_elapsed_ms, "\r\n");
             if (result == CODEC_SERVICE_OK) {
                 UARTa_SendStringAndNumber("Encoding successful, AMR length: ", codec_service_get_amr_len(), "\r\n");
                 current_state = APP_STATE_AMR_READY;
@@ -150,9 +156,15 @@ int16_t main(int16_t argc, char **argv)
                 current_state = APP_STATE_IDLE;
             }
         } else if (current_state == APP_STATE_DECODE) {
+            Uint32 decode_start_tick;
+            Uint32 decode_elapsed_ms;
+
             UARTa_SendString("### Starting decoding ###\r\n");
             // STEP 4
+            decode_start_tick = tick_count;
             result = codec_service_decode_received();
+            decode_elapsed_ms = (tick_count - decode_start_tick) * 10UL;
+            UARTa_SendStringAndNumber("Decode time(ms): ", decode_elapsed_ms, "\r\n");
             if (result == CODEC_SERVICE_OK) {
                 UARTa_SendStringAndNumber("Decoding successful, WAV length: ", codec_service_get_wav_len(), "\r\n");
                 current_state = APP_STATE_PLAY;

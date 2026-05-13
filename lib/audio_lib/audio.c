@@ -290,6 +290,7 @@ int16_t amr_encode_wav(const uint8_t *wav_data, uint32_t wav_len,
     return 0;  // Success
 }
 
+#pragma CODE_SECTION(amr_encode_pcm16, "ramfuncs");
 int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
                     uint8_t *amr_buf, uint16_t amr_buf_size,
                     uint16_t *amr_len)
@@ -423,6 +424,7 @@ void __write_header(uint8_t *ptr_data_buf, uint32_t length) {
  * @return 0 on success, negative value indicates error code
  */
 
+#pragma CODE_SECTION(amr_decode_wav, "ramfuncs");
 int16_t amr_decode_wav(const uint8_t *amr_data, uint16_t amr_len,
                   uint8_t *wav_ptr, uint32_t wav_buf_size,
                   uint32_t *wav_len)
