@@ -54,6 +54,15 @@ void InitMcbsp(void)
 	#endif               // end DSP28_MCBSPB
 }
 
+/*
+1. 先复位 McBSP 收发控制寄存器
+2. 配置 SPCR1 / SPCR2 / PCR
+3. 配置接收格式 RCR1 / RCR2
+4. 配置发送格式 XCR1 / XCR2
+5. 预装一个 0 到发送寄存器 DXR1
+6. 使能接收中断
+7. 释放接收器和发送器复位
+*/
 void InitMcbspa(void)
 {
 
@@ -67,6 +76,11 @@ void InitMcbspa(void)
 	
 	McbspaRegs.XCR1.all = XCR10_VAL;
 	McbspaRegs.XCR2.all = XCR20_VAL;
+	/*#define RCR10_VAL 0x0140
+	0x0100 -> RFRLEN1 = 1
+	0x0040 -> RWDLEN1 = 2
+	RFRLEN1 + 1 是 phase 1 中 serial word 的数量；RWDLEN1 = 2 对应 16-bit word
+	*/
 	McbspaRegs.RCR1.all = RCR10_VAL;
 	McbspaRegs.RCR2.all = RCR20_VAL;
 	

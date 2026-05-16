@@ -8,6 +8,9 @@
 
 void AIC23Init(void);
 void I2CA_Init(void);
+
+typedef Uint32 (*audio_tick_getter_t)(void);
+void audio_set_tick_getter(audio_tick_getter_t getter);
 /*
  * header: buffer of PCM data to which WAV header will be added
  * data_size: size of PCM data in bytes

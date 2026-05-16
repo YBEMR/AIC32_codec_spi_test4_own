@@ -4,6 +4,26 @@
 extern void UARTa_SendString(char *msg);
 extern void UARTa_SendStringAndNumber(char *msg1, int32 number, char *msg2);
 
+#ifndef AMR_ENCODE_MODE
+#define AMR_ENCODE_MODE MR515
+#endif
+
+static audio_tick_getter_t audio_tick_getter = 0;
+
+void audio_set_tick_getter(audio_tick_getter_t getter)
+{
+    audio_tick_getter = getter;
+}
+
+static Uint32 audio_get_time_ms(void)
+{
+    if (audio_tick_getter == 0) {
+        return 0;
+    }
+
+    return audio_tick_getter() * 10UL;
+}
+
 void I2CA_Init()
 {
    // Initialize I2C
@@ -295,7 +315,7 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
                     uint8_t *amr_buf, uint16_t amr_buf_size,
                     uint16_t *amr_len)
 {
-    enum Mode mode_val = MR515;
+    enum Mode mode_val = AMR_ENCODE_MODE;
     int16_t pcm_tail[160];
     const int16_t *pcm_frame;
     struct amr_param_frame frame;
@@ -303,6 +323,13 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
     int16_t dtx = 0, vad2 = 0;
     uint16_t buf_offset = 0;
     uint32_t sample_offset = 0;
+    uint32_t frame_count = 0;
+    Uint32 create_start_ms;
+    Uint32 create_elapsed_ms;
+    Uint32 core_elapsed_ms = 0;
+    Uint32 pack_elapsed_ms = 0;
+    Uint32 copy_elapsed_ms = 0;
+    Uint32 section_start_ms;
     unsigned nbytes;
     int16_t i;
 
@@ -311,11 +338,16 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
     vad2 = 0;
     dtx = 0;
 
+    create_start_ms = audio_get_time_ms();
     __amr_encoder_create(&__encode_st, dtx, vad2);
+    create_elapsed_ms = audio_get_time_ms() - create_start_ms;
+
+    UARTa_SendStringAndNumber("AMR encode mode: ", (Uint32)mode_val, "\r\n");
 
     memcpy(amr_buf, amr_file_header_magic, AMR_IETF_HDR_LEN);
     buf_offset = AMR_IETF_HDR_LEN;
 
+    // 指针操作，减少复制
     while (sample_offset < sample_count) {
         uint32_t remain = sample_count - sample_offset;
         if (remain >= 160U) {
@@ -325,6 +357,7 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
             for (i = 0; i < (int16_t)remain; i++) {
                 pcm_tail[i] = pcm_data[sample_offset + (uint32_t)i];
             }
+            // 尾部补零
             while (i < 160) {
                 pcm_tail[i++] = 0;
             }
@@ -332,8 +365,13 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
             sample_offset = sample_count;
         }
 
+        section_start_ms = audio_get_time_ms();
         amr_encode_frame(&__encode_st, mode_val, pcm_frame, &frame);
+        core_elapsed_ms += audio_get_time_ms() - section_start_ms;
+
+        section_start_ms = audio_get_time_ms();
         nbytes = amr_frame_to_ietf(&frame, out_bytes);
+        pack_elapsed_ms += audio_get_time_ms() - section_start_ms;
 
         if (buf_offset + nbytes > amr_buf_size) {
             UARTa_SendStringAndNumber("error: AMR buffer overflow, used=", buf_offset, "\r\n");
@@ -342,11 +380,22 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
             return -1;
         }
 
+        section_start_ms = audio_get_time_ms();
         memcpy(amr_buf + buf_offset, out_bytes, nbytes);
+        copy_elapsed_ms += audio_get_time_ms() - section_start_ms;
         buf_offset += nbytes;
+        frame_count++;
     }
 
     *amr_len = buf_offset;
+    UARTa_SendStringAndNumber("AMR frames: ", frame_count, "\r\n");
+    if (frame_count != 0U) {
+        UARTa_SendStringAndNumber("Encode avg(ms/frame): ", core_elapsed_ms / frame_count, "\r\n");
+    }
+    UARTa_SendStringAndNumber("Encode create(ms): ", create_elapsed_ms, "\r\n");
+    UARTa_SendStringAndNumber("Encode core(ms): ", core_elapsed_ms, "\r\n");
+    UARTa_SendStringAndNumber("Encode pack(ms): ", pack_elapsed_ms, "\r\n");
+    UARTa_SendStringAndNumber("Encode copy(ms): ", copy_elapsed_ms, "\r\n");
     return 0;
 }
 

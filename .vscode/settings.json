@@ -8,6 +8,7 @@
         "spi.h": "c",
         "exint.h": "c",
         "type_traits": "c",
-        "algorithm": "c"
+        "algorithm": "c",
+        "basic_op.h": "c"
     }
 }

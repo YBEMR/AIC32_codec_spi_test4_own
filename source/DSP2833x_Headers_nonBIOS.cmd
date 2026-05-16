@@ -163,7 +163,7 @@ SECTIONS
    I2caRegsFile      : > I2CA,        PAGE = 1
               
 /*** Code Security Module Register Structures ***/
-   CsmPwlFile        : > CSM_PWL,     PAGE = 1
+   CsmPwlFile        : > CSM_PWL,     PAGE = 1, TYPE = DSECT
 }
 
 

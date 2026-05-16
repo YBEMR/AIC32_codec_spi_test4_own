@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include "typedef.h"
 #include "namespace.h"
+#define BASICOP2_IMPLEMENTATION
 #include "basic_op.h"
 
 #if (WMOPS)
