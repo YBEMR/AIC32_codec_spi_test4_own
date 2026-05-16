@@ -80,18 +80,18 @@ PAGE 0:    /* Program Memory */
    //RAML2       : origin = 0x00A000, length = 0x001000     /* on-chip RAM block L2 */
    //RAML3       : origin = 0x00B000, length = 0x001000     /* on-chip RAM block L3 */
    ZONE6A      : origin = 0x100000, length = 0x00FC00    /* XINTF zone 6 - program space*/ 
+   ZONE7FAST   : origin = 0x236000, length = 0x00A000    /* XINTF zone 7 - fast code */
    //ZONE7       : origin = 0x200000, length = 0x100000    /* XINTF zone 7  */
-   FLASHH      : origin = 0x306000, length = 0x002000     /* on-chip FLASH */
    FLASHG      : origin = 0x308000, length = 0x008000     /* on-chip FLASH */
    FLASHF      : origin = 0x310000, length = 0x008000     /* on-chip FLASH */
    FLASHE      : origin = 0x318000, length = 0x008000     /* on-chip FLASH */
    FLASHD      : origin = 0x320000, length = 0x007E80     /* on-chip FLASH */
-   BEGIN       : origin = 0x327E80, length = 0x000002  //不能和bootloader的放到同一片扇区，因为那篇扇区不会被擦除，而这里又需要写入，在未擦除的扇区强行写入会造成程序卡死
+   BEGIN       : origin = 0x327E80, length = 0x000002  /* keep app entry outside bootloader sector */
    //BEGIN       : origin = 0x33FFF6, length = 0x000002
    FLASHC      : origin = 0x328000, length = 0x008000     /* on-chip FLASH */
-   FLASHA      : origin = 0x338000, length = 0x007E80     /* on-chip FLASH */
    CSM_RSVD    : origin = 0x33FF80, length = 0x000076     /* Part of FLASHA.  Program with all 0x0000 when CSM is in use. */
    CSM_PWL     : origin = 0x33FFF8, length = 0x000008     /* Part of FLASHA.  CSM password locations in FLASHA */
+   FASTLOAD    : origin = 0x330000, length = 0x008000     /* FLASHB only; keep FLASHA/CSM untouched */
    OTP         : origin = 0x380400, length = 0x000400     /* on-chip OTP */
    ADC_CAL     : origin = 0x380080, length = 0x000009     /* ADC_cal function in Reserved memory */
    
@@ -117,8 +117,7 @@ PAGE 1 :   /* Data Memory */
    //RAML6       : origin = 0x00E000, length = 0x001000     /* on-chip RAM block L1 */
    RAML7       : origin = 0x00F000, length = 0x001000     /* on-chip RAM block L1 */
    ZONE6B      : origin = 0x10FC00, length = 0x000400     /* XINTF zone 6 - data space */
-   ZONE7       : origin = 0x200000, length = 0x040000
-   FLASHB      : origin = 0x330000, length = 0x008000     /* on-chip FLASH */
+   ZONE7DATA   : origin = 0x200000, length = 0x036000
 }
 
 /* Allocate sections to memory blocks.
@@ -134,13 +133,12 @@ SECTIONS
    /* Allocate program areas: */
    .cinit              : > FLASHC      PAGE = 0
    .pinit              : > FLASHC,     PAGE = 0
-   .text               : >> FLASHG | FLASHF | FLASHE   PAGE = 0
    codestart           : > BEGIN       PAGE = 0
    ramfuncs            :
                          {
                             *(ramfuncs)
+                            /* Keep cod_amr core in RAML0 ramfuncs. */
                             audio_lib.lib<cod_amr.obj>(.text)
-                            audio_lib.lib<pitch_fr.obj>(.text)
                          } LOAD = FLASHD,
                            RUN = RAML0,
                            LOAD_START(_RamfuncsLoadStart),
@@ -148,8 +146,60 @@ SECTIONS
                            RUN_START(_RamfuncsRunStart),
                            PAGE = 0
 
-   csmpasswds          : > CSM_PWL     PAGE = 0
-   csm_rsvd            : > CSM_RSVD    PAGE = 0
+   amrfastcode         :
+                         {
+                            audio_lib.lib<s10_8pf.obj>(.text)
+                            audio_lib.lib<c4_17pf.obj>(.text)
+                            audio_lib.lib<qgain475.obj>(.text)
+                            audio_lib.lib<c3_14pf.obj>(.text)
+                            audio_lib.lib<c8_31pf.obj>(.text)
+                            audio_lib.lib<c2_11pf.obj>(.text)
+                            audio_lib.lib<cbsearch.obj>(.text)
+                            audio_lib.lib<basicop2.obj>(.text)
+                            audio_lib.lib<pitch_fr.obj>(.text)
+                            audio_lib.lib<g_pitch.obj>(.text)
+                            audio_lib.lib<gc_pred.obj>(.text)
+                            audio_lib.lib<cor_h.obj>(.text)
+                            audio_lib.lib<set_sign.obj>(.text)
+                            audio_lib.lib<pitch_ol.obj>(.text)
+                            audio_lib.lib<c2_9pf.obj>(.text)
+                            audio_lib.lib<qua_gain.obj>(.text)
+                            audio_lib.lib<g_code.obj>(.text)
+                            audio_lib.lib<hp_max.obj>(.text)
+                            audio_lib.lib<autocorr.obj>(.text)
+                            audio_lib.lib<az_lsp.obj>(.text)
+                         } LOAD = FASTLOAD,
+                           RUN = ZONE7FAST,
+                           LOAD_START(_AmrFastLoadStart),
+                           LOAD_END(_AmrFastLoadEnd),
+                           RUN_START(_AmrFastRunStart),
+                           PAGE = 0
+
+   amrfastcode2        :
+                         {
+                           /*
+                            audio_lib.lib<q_plsf_5.obj>(.text)
+                            audio_lib.lib<q_plsf_3.obj>(.text)
+                            audio_lib.lib<r_fft.obj>(.text)
+                            audio_lib.lib<levinson.obj>(.text)
+                            audio_lib.lib<gain_q.obj>(.text)
+                            audio_lib.lib<cl_ltp.obj>(.text)
+                            audio_lib.lib<pre_proc.obj>(.text)
+                            audio_lib.lib<pred_lt.obj>(.text)
+                            audio_lib.lib<convolve.obj>(.text)
+                            audio_lib.lib<pre_big.obj>(.text)
+                            */
+                         } LOAD = FLASHD,
+                           RUN = ZONE7FAST,
+                           LOAD_START(_AmrFast2LoadStart),
+                           LOAD_END(_AmrFast2LoadEnd),
+                           RUN_START(_AmrFast2RunStart),
+                           PAGE = 0
+
+   .text               : >> FLASHG | FLASHF | FLASHE | FLASHD   PAGE = 0
+
+   csmpasswds          : > CSM_PWL     PAGE = 0, TYPE = DSECT
+   csm_rsvd            : > CSM_RSVD    PAGE = 0, TYPE = DSECT
    
    /* Allocate uninitalized data sections: */
    .stack              : > RAML1       PAGE = 1
@@ -175,7 +225,7 @@ SECTIONS
    
    /* Allocate 0x400 of XINTF Zone 6 to storing data */
    ZONE6DATA        : > ZONE6B,    PAGE = 1
-   ZONE7DATA        : > ZONE7,    PAGE = 1
+   ZONE7DATA        : > ZONE7DATA,    PAGE = 1
 
    /* .reset is a standard section used by the compiler.  It contains the */ 
    /* the address of the start of _c_int00 for C Code.   /*

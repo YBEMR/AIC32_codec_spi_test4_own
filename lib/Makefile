@@ -60,7 +60,7 @@ COMMON_FLAGS += --diag_warning=225 --diag_wrap=off --display_error_number --abi=
 
 AUDIO_DEBUG_FLAGS ?=
 CODEC_SERVICE_DEBUG_FLAGS ?=
-AMR_ENCODE_MODE ?= MR475
+AMR_ENCODE_MODE ?= MR515
 SPEED_COMMON_FLAGS := $(filter-out -g,$(COMMON_FLAGS))
 OPT_SPEED_FLAGS := --opt_level=3 --opt_for_speed=5
 

@@ -35,7 +35,15 @@ static volatile Uint16 play_sample_hold = 0;
 #define KEY_DEBOUNCE_MS 260U
 #define APP_MONO_RECORD_WORD_SELECT 0U
 
+extern Uint16 AmrFastLoadStart;
+extern Uint16 AmrFastLoadEnd;
+extern Uint16 AmrFastRunStart;
+extern Uint16 AmrFast2LoadStart;
+extern Uint16 AmrFast2LoadEnd;
+extern Uint16 AmrFast2RunStart;
+
 static void init_zone7(void);
+static Uint32 app_get_tick_count(void);
 static void delay(void);
 void Delay(int16_t time);
 
@@ -89,9 +97,12 @@ int16_t main(int16_t argc, char **argv)
     ERTM;
 
     init_zone7();
+    MemCopy(&AmrFastLoadStart, &AmrFastLoadEnd, &AmrFastRunStart);
+    MemCopy(&AmrFast2LoadStart, &AmrFast2LoadEnd, &AmrFast2RunStart);
+    audio_set_tick_getter(app_get_tick_count);
     codec_service_reset();
 
-    UARTa_SendString("AIC32 codec SPI student app ready.\r\n");
+    UARTa_SendString("AIC32 codec SPI own app ready.\r\n");
 
     while (1) {
         LED1_TOGGLE;
@@ -249,6 +260,7 @@ interrupt void ISRMcbspSend(void)
     Uint16 word_phase;
     int16_t temp;
 
+    // 翻转相位状态，只有在特定相位时才进行读操作，以实现单声道录音
     word_phase = mcbsp_word_phase;
     mcbsp_word_phase ^= 1U;
 
@@ -259,6 +271,8 @@ interrupt void ISRMcbspSend(void)
         }
         McbspaRegs.DXR1.all = temp;
     } else if (current_state == APP_STATE_PLAY) {
+        // 将单声道数据复制到左右声道输出，以实现单声道播放
+        // 在相位0读一个样本，在相位1输出同一个样本
         if (word_phase == 0U) {
             if (codec_service_get_play_sample(&sample) == CODEC_SERVICE_PLAY_DONE) {
                 UARTa_SendString("Play complete.\r\n");
@@ -302,6 +316,11 @@ static void init_zone7(void)
     EDIS;
 
     asm(" RPT #7 || NOP");
+}
+
+static Uint32 app_get_tick_count(void)
+{
+    return tick_count;
 }
 
 static void delay(void)
