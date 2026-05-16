@@ -148,26 +148,28 @@ SECTIONS
 
    amrfastcode         :
                          {
-                            audio_lib.lib<s10_8pf.obj>(.text)
-                            audio_lib.lib<c4_17pf.obj>(.text)
-                            audio_lib.lib<qgain475.obj>(.text)
-                            audio_lib.lib<c3_14pf.obj>(.text)
-                            audio_lib.lib<c8_31pf.obj>(.text)
-                            audio_lib.lib<c2_11pf.obj>(.text)
-                            audio_lib.lib<cbsearch.obj>(.text)
-                            audio_lib.lib<basicop2.obj>(.text)
-                            audio_lib.lib<pitch_fr.obj>(.text)
-                            audio_lib.lib<g_pitch.obj>(.text)
-                            audio_lib.lib<gc_pred.obj>(.text)
-                            audio_lib.lib<cor_h.obj>(.text)
-                            audio_lib.lib<set_sign.obj>(.text)
-                            audio_lib.lib<pitch_ol.obj>(.text)
-                            audio_lib.lib<c2_9pf.obj>(.text)
-                            audio_lib.lib<qua_gain.obj>(.text)
-                            audio_lib.lib<g_code.obj>(.text)
-                            audio_lib.lib<hp_max.obj>(.text)
-                            audio_lib.lib<autocorr.obj>(.text)
-                            audio_lib.lib<az_lsp.obj>(.text)
+                           audio_lib.lib<s10_8pf.obj>(.text)
+                           audio_lib.lib<c4_17pf.obj>(.text)
+                           audio_lib.lib<qgain475.obj>(.text)
+                           audio_lib.lib<c3_14pf.obj>(.text)
+                           audio_lib.lib<c8_31pf.obj>(.text)
+                           audio_lib.lib<c2_11pf.obj>(.text)
+                           audio_lib.lib<cbsearch.obj>(.text)
+                           audio_lib.lib<basicop2.obj>(.text)
+                           /*
+                           audio_lib.lib<pitch_fr.obj>(.text)
+                           audio_lib.lib<g_pitch.obj>(.text)
+                           audio_lib.lib<gc_pred.obj>(.text)
+                           audio_lib.lib<cor_h.obj>(.text)
+                           audio_lib.lib<set_sign.obj>(.text)
+                           audio_lib.lib<pitch_ol.obj>(.text)
+                           audio_lib.lib<c2_9pf.obj>(.text)
+                           audio_lib.lib<qua_gain.obj>(.text)
+                           audio_lib.lib<g_code.obj>(.text)
+                           audio_lib.lib<hp_max.obj>(.text)
+                           audio_lib.lib<autocorr.obj>(.text)
+                           audio_lib.lib<az_lsp.obj>(.text)
+                           */
                          } LOAD = FASTLOAD,
                            RUN = ZONE7FAST,
                            LOAD_START(_AmrFastLoadStart),
@@ -178,17 +180,25 @@ SECTIONS
    amrfastcode2        :
                          {
                            /*
-                            audio_lib.lib<q_plsf_5.obj>(.text)
-                            audio_lib.lib<q_plsf_3.obj>(.text)
-                            audio_lib.lib<r_fft.obj>(.text)
-                            audio_lib.lib<levinson.obj>(.text)
-                            audio_lib.lib<gain_q.obj>(.text)
-                            audio_lib.lib<cl_ltp.obj>(.text)
-                            audio_lib.lib<pre_proc.obj>(.text)
-                            audio_lib.lib<pred_lt.obj>(.text)
-                            audio_lib.lib<convolve.obj>(.text)
-                            audio_lib.lib<pre_big.obj>(.text)
-                            */
+                           audio_lib.lib<dtx_enc.obj>(.text)
+                           audio_lib.lib<c1035pf.obj>(.text)
+                           audio_lib.lib<p_ol_wgh.obj>(.text)
+                           audio_lib.lib<ph_disp.obj>(.text)
+                           audio_lib.lib<bgnscd.obj>(.text)
+
+                           
+                           audio_lib.lib<q_plsf_5.obj>(.text)
+                           audio_lib.lib<q_plsf_3.obj>(.text)
+                           audio_lib.lib<r_fft.obj>(.text)
+                           audio_lib.lib<levinson.obj>(.text)
+                           audio_lib.lib<gain_q.obj>(.text)
+                           audio_lib.lib<cl_ltp.obj>(.text)
+                           audio_lib.lib<pre_proc.obj>(.text)
+                           audio_lib.lib<pred_lt.obj>(.text)
+                           audio_lib.lib<convolve.obj>(.text)
+                           audio_lib.lib<pre_big.obj>(.text)
+                           */
+                            
                          } LOAD = FLASHD,
                            RUN = ZONE7FAST,
                            LOAD_START(_AmrFast2LoadStart),
