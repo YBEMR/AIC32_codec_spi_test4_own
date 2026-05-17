@@ -199,6 +199,62 @@ static void __amr_encoder_create(struct amr_encoder_state *st, int16_t dtx, int1
     amr_encoder_reset(st, dtx, use_vad2);
 }
 
+// 复位单帧编码器状态
+/**
+ * @brief 重置 AMR 编码器状态，用于开始一段新的 PTT 语音。
+ *
+ * @return int16_t 0 表示成功，负值表示失败。
+ */
+#pragma CODE_SECTION(amr_encode_frame_reset, "ramfuncs");
+int16_t amr_encode_frame_reset(void)
+{
+    extern struct amr_encoder_state __encode_st;
+
+    __amr_encoder_create(&__encode_st, 0, 0);
+    return 0;
+}
+
+// 编码单帧PCM数据，输出AMR IETF格式数据
+/**
+ * @brief 将 160 个 PCM16 sample 编码成一帧 raw IETF AMR 数据。
+ *
+ * 输出数据不包含 .amr 文件头，只包含一帧可直接放入语音包 payload 的 AMR frame。
+ *
+ * @param pcm_frame 输入 PCM16 帧，必须包含 AMR_PCM_FRAME_SAMPLES 个 sample。
+ * @param amr_frame 输出缓冲区，用于保存编码后的 AMR frame。
+ * @param amr_frame_buf_size 输出缓冲区大小，单位为 byte。
+ * @param amr_frame_len 输出参数，返回实际 AMR frame 长度，单位为 byte。
+ *
+ * @return int16_t 0 表示成功，负值表示失败。
+ */
+#pragma CODE_SECTION(amr_encode_pcm16_frame, "ramfuncs");
+int16_t amr_encode_pcm16_frame(const int16_t *pcm_frame,
+                    uint8_t *amr_frame, uint16_t amr_frame_buf_size,
+                    uint16_t *amr_frame_len)
+{
+    enum Mode mode_val = AMR_ENCODE_MODE;
+    struct amr_param_frame frame;
+    uint8_t out_bytes[AMR_IETF_MAX_PL] = {0};
+    unsigned nbytes;
+    extern struct amr_encoder_state __encode_st;
+
+    if ((pcm_frame == 0) || (amr_frame == 0) || (amr_frame_len == 0)) {
+        return -1;
+    }
+
+    amr_encode_frame(&__encode_st, mode_val, pcm_frame, &frame);
+    nbytes = amr_frame_to_ietf(&frame, out_bytes);
+
+    if ((nbytes > amr_frame_buf_size) || (nbytes > AMR_FRAME_MAX_BYTES)) {
+        *amr_frame_len = 0;
+        return -1;
+    }
+
+    memcpy(amr_frame, out_bytes, nbytes);
+    *amr_frame_len = (uint16_t)nbytes;
+    return 0;
+}
+
 /* length must be less than or equal to 320 */
 static void __wavrd_get_pcm_block(uint8_t **bytes, uint16_t length, int16_t *pcm)
 {
@@ -318,8 +374,6 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
     enum Mode mode_val = AMR_ENCODE_MODE;
     int16_t pcm_tail[160];
     const int16_t *pcm_frame;
-    struct amr_param_frame frame;
-    uint8_t out_bytes[AMR_IETF_MAX_PL] = {0};
     int16_t dtx = 0, vad2 = 0;
     uint16_t buf_offset = 0;
     uint32_t sample_offset = 0;
@@ -330,7 +384,8 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
     Uint32 pack_elapsed_ms = 0;
     Uint32 copy_elapsed_ms = 0;
     Uint32 section_start_ms;
-    unsigned nbytes;
+    uint16_t nbytes;
+    int16_t result;
     int16_t i;
 
     extern struct amr_encoder_state __encode_st;
@@ -366,14 +421,13 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
         }
 
         section_start_ms = audio_get_time_ms();
-        amr_encode_frame(&__encode_st, mode_val, pcm_frame, &frame);
+        result = amr_encode_pcm16_frame(pcm_frame,
+                                        amr_buf + buf_offset,
+                                        (uint16_t)(amr_buf_size - buf_offset),
+                                        &nbytes);
         core_elapsed_ms += audio_get_time_ms() - section_start_ms;
 
-        section_start_ms = audio_get_time_ms();
-        nbytes = amr_frame_to_ietf(&frame, out_bytes);
-        pack_elapsed_ms += audio_get_time_ms() - section_start_ms;
-
-        if (buf_offset + nbytes > amr_buf_size) {
+        if (result != 0) {
             UARTa_SendStringAndNumber("error: AMR buffer overflow, used=", buf_offset, "\r\n");
             UARTa_SendStringAndNumber("error: AMR frame bytes needed=", nbytes, "\r\n");
             *amr_len = buf_offset;
@@ -381,7 +435,6 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
         }
 
         section_start_ms = audio_get_time_ms();
-        memcpy(amr_buf + buf_offset, out_bytes, nbytes);
         copy_elapsed_ms += audio_get_time_ms() - section_start_ms;
         buf_offset += nbytes;
         frame_count++;
@@ -403,6 +456,76 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
 void __amr_decoder_create(struct amr_decoder_state *st)
 {
     amr_decoder_reset(st);
+}
+
+// 复位单帧解码器状态
+/**
+ * @brief 重置 AMR 解码器状态，用于开始接收一段新的 PTT 语音。
+ *
+ * @return int16_t 0 表示成功，负值表示失败。
+ */
+#pragma CODE_SECTION(amr_decode_frame_reset, "ramfuncs");
+int16_t amr_decode_frame_reset(void)
+{
+    extern struct amr_decoder_state __decode_st;
+
+    __amr_decoder_create(&__decode_st);
+    return 0;
+}
+
+// 解码单帧AMR IETF数据，输出16bit PCM数据
+/**
+ * @brief 将一帧 raw IETF AMR 数据解码成 PCM16 sample。
+ *
+ * 输入数据不包含 .amr 文件头，只包含一帧语音包 payload 中的 AMR frame。
+ *
+ * @param amr_frame 输入 AMR frame 数据。
+ * @param amr_frame_len 输入 AMR frame 长度，单位为 byte。
+ * @param pcm_frame 输出缓冲区，用于保存解码后的 PCM16 sample。
+ * @param pcm_sample_capacity 输出缓冲区容量，单位为 sample。
+ * @param pcm_sample_count 输出参数，返回实际输出的 PCM16 sample 数。
+ *
+ * @return int16_t 0 表示成功，负值表示失败。
+ */
+#pragma CODE_SECTION(amr_decode_pcm16_frame, "ramfuncs");
+int16_t amr_decode_pcm16_frame(const uint8_t *amr_frame,
+                    uint16_t amr_frame_len,
+                    int16_t *pcm_frame,
+                    uint16_t pcm_sample_capacity,
+                    uint16_t *pcm_sample_count)
+{
+    struct amr_param_frame frame;
+    int16_t rc;
+    uint16_t expected_len;
+    extern struct amr_decoder_state __decode_st;
+
+    if ((amr_frame == 0) || (pcm_frame == 0) || (pcm_sample_count == 0)) {
+        return -1;
+    }
+
+    if ((amr_frame_len == 0U) ||
+        (amr_frame_len > AMR_FRAME_MAX_BYTES) ||
+        (pcm_sample_capacity < AMR_PCM_FRAME_SAMPLES)) {
+        *pcm_sample_count = 0;
+        return -1;
+    }
+
+    rc = amr_ietf_grok_first_octet(amr_frame[0]);
+    if (rc < 0) {
+        *pcm_sample_count = 0;
+        return -1;
+    }
+
+    expected_len = (uint16_t)(rc + 1);
+    if (amr_frame_len != expected_len) {
+        *pcm_sample_count = 0;
+        return -1;
+    }
+
+    amr_frame_from_ietf(amr_frame, &frame);
+    amr_decode_frame(&__decode_st, &frame, pcm_frame);
+    *pcm_sample_count = AMR_PCM_FRAME_SAMPLES;
+    return 0;
 }
 
 void __write_pcm_to_wav(uint8_t **out_buf, const int16_t *pcm, uint32_t *data_length)
@@ -473,14 +596,13 @@ int16_t amr_decode_wav(const uint8_t *amr_data, uint16_t amr_len,
                   uint8_t *wav_ptr, uint32_t wav_buf_size,
                   uint32_t *wav_len)
 {
-    int16_t pcm[160];
-    struct amr_param_frame frame;
-    uint8_t out_bytes[AMR_IETF_MAX_PL] = {0};
+    int16_t pcm[AMR_PCM_FRAME_SAMPLES];
 
     uint16_t buf_offset = 0;                    // Current write position in buffer
     int16_t rc = 0;
-
-    extern struct amr_decoder_state __decode_st;
+    uint16_t frame_start;
+    uint16_t frame_len;
+    uint16_t pcm_sample_count;
 
     if (wav_buf_size < 44U) {
         UARTa_SendString("error: wav buffer too small\n");
@@ -498,36 +620,42 @@ int16_t amr_decode_wav(const uint8_t *amr_data, uint16_t amr_len,
     }
 
     /* Initialize decoder */
-    __amr_decoder_create(&__decode_st);
+    amr_decode_frame_reset();
 
     uint8_t *ptr_data = wav_ptr+44;
     uint32_t data_length = 0;
     for (;;) {
         if(buf_offset >= amr_len)
             break;
-        rc = amr_data[buf_offset++];
-        out_bytes[0] = rc;
-        rc = amr_ietf_grok_first_octet(out_bytes[0]);
+        frame_start = buf_offset;
+        rc = amr_ietf_grok_first_octet(amr_data[buf_offset]);
         if (rc < 0) {
             UARTa_SendString("error: file contains invalid AMR data\n");
             return -1;
         }
+        buf_offset++;
 
         if (buf_offset + rc > amr_len) {
             UARTa_SendString("warning: incomplete AMR frame at EOF\n");
             break;
         }
 
-        memcpy(out_bytes+1, &amr_data[buf_offset], rc*sizeof(uint8_t));
         buf_offset += rc;
+        frame_len = (uint16_t)(rc + 1);
 
         if((data_length + 44U + 320U) > wav_buf_size){
             UARTa_SendString("warning: wav buffer full, decode truncated\n");
             break;
         }
 
-        amr_frame_from_ietf(out_bytes, &frame);
-        amr_decode_frame(&__decode_st, &frame, pcm);
+        if (amr_decode_pcm16_frame(&amr_data[frame_start],
+                                   frame_len,
+                                   pcm,
+                                   AMR_PCM_FRAME_SAMPLES,
+                                   &pcm_sample_count) != 0) {
+            UARTa_SendString("error: AMR frame decode failed\n");
+            return -1;
+        }
         __write_pcm_to_wav(&ptr_data, pcm, &data_length);
     }
     ptr_data = wav_ptr;

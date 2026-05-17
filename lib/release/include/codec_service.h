@@ -21,6 +21,7 @@
 #define CODEC_SERVICE_ERR_DECODE        -3
 #define CODEC_SERVICE_ERR_LENGTH        -4
 #define CODEC_SERVICE_PLAY_DONE          1
+#define CODEC_SERVICE_PTT_DONE           2
 
 #define SPI_DATASIZE_8BIT  0
 #define SPI_DATASIZE_16BIT 1
@@ -36,6 +37,19 @@ int16_t codec_service_spi_exchange_first(void);
 int16_t codec_service_spi_exchange_second(void);
 int16_t codec_service_decode_received(void);
 int16_t codec_service_get_play_sample(Uint16 *sample);
+
+int16_t codec_service_ptt_encode_begin(void);
+int16_t codec_service_ptt_encode_next(uint8_t *amr_frame,
+                                      Uint16 amr_frame_buf_size,
+                                      Uint16 *amr_frame_len,
+                                      Uint16 *frame_id,
+                                      Uint16 *frame_count,
+                                      Uint16 *is_last);
+
+int16_t codec_service_ptt_decode_begin(void);
+int16_t codec_service_ptt_decode_frame(const uint8_t *amr_frame,
+                                       Uint16 amr_frame_len);
+int16_t codec_service_ptt_decode_finish(void);
 
 Uint16 codec_service_get_amr_len(void);
 Uint16 codec_service_get_received_amr_len(void);

@@ -11,6 +11,9 @@ void I2CA_Init(void);
 
 typedef Uint32 (*audio_tick_getter_t)(void);
 void audio_set_tick_getter(audio_tick_getter_t getter);
+
+#define AMR_PCM_FRAME_SAMPLES 160U
+#define AMR_FRAME_MAX_BYTES   AMR_IETF_MAX_PL
 /*
  * header: buffer of PCM data to which WAV header will be added
  * data_size: size of PCM data in bytes
@@ -46,6 +49,11 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
                     uint8_t *amr_buf, uint16_t amr_buf_size,
                     uint16_t *amr_len);
 
+int16_t amr_encode_frame_reset(void);
+int16_t amr_encode_pcm16_frame(const int16_t *pcm_frame,
+                    uint8_t *amr_frame, uint16_t amr_frame_buf_size,
+                    uint16_t *amr_frame_len);
+
 /*
  * amr_data: AMR data
  * amr_len: length of AMR data in bytes
@@ -56,6 +64,13 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
 int16_t amr_decode_wav(const uint8_t *amr_data, uint16_t amr_len,
                   uint8_t *wav_ptr, uint32_t wav_buf_size,
                   uint32_t *wav_len);
+
+int16_t amr_decode_frame_reset(void);
+int16_t amr_decode_pcm16_frame(const uint8_t *amr_frame,
+                    uint16_t amr_frame_len,
+                    int16_t *pcm_frame,
+                    uint16_t pcm_sample_capacity,
+                    uint16_t *pcm_sample_count);
 
 void convert_8bit_to_16bit(const uint8_t *src, uint16_t *dst, uint32_t num_bytes);
 void __amr_decoder_create(struct amr_decoder_state *st);

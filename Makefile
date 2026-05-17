@@ -77,7 +77,9 @@ SOURCE_C_SRCS := \
 	source/DSP2833x_SysCtrl.c \
 	source/DSP2833x_Xintf.c
 
-USER_C_SRCS := user/student_codec_app.c
+USER_C_SRCS := \
+	user/student_codec_app.c \
+	user/voice_packet.c
 
 SOURCE_ASM_OBJS := $(patsubst source/%.asm,$(BUILD_DIR)/source/%.obj,$(SOURCE_ASM_SRCS))
 SOURCE_C_OBJS := $(patsubst source/%.c,$(BUILD_DIR)/source/%.obj,$(SOURCE_C_SRCS))
