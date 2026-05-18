@@ -66,6 +66,7 @@ int16_t amr_decode_wav(const uint8_t *amr_data, uint16_t amr_len,
                   uint32_t *wav_len);
 
 int16_t amr_decode_frame_reset(void);
+int16_t amr_ietf_frame_length(uint8_t first_octet, uint16_t *frame_len);
 int16_t amr_decode_pcm16_frame(const uint8_t *amr_frame,
                     uint16_t amr_frame_len,
                     int16_t *pcm_frame,

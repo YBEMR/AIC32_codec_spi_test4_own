@@ -2,18 +2,13 @@
 
 #include "audio.h"
 #include "spi.h"
+#include <string.h>
 
 typedef union {
     int16_t record_buf[CODEC_SERVICE_MAX_RECORD_CNT];
-    /* PTT 新路径直接保存 PCM16 sample；与录音/WAV 缓冲复用同一块 Zone7 大内存。 */
-    int16_t ptt_play_buf[CODEC_SERVICE_MAX_RECORD_CNT];
-    uint8_t wav_output_buffer[CODEC_SERVICE_WAV_BUF_SIZE];
+    /* 播放路径统一保存 PCM16 sample；与录音缓存复用同一块 Zone7 大内存。 */
+    int16_t play_buf[CODEC_SERVICE_MAX_RECORD_CNT];
 } codec_service_workbuf_t;
-
-typedef enum {
-    CODEC_SERVICE_PLAY_SOURCE_WAV = 0,
-    CODEC_SERVICE_PLAY_SOURCE_PTT_PCM = 1
-} codec_service_play_source_t;
 
 #pragma DATA_SECTION(codec_workbuf, "ZONE7DATA");
 static codec_service_workbuf_t codec_workbuf;
@@ -26,21 +21,18 @@ static uint8_t spi_receive_buffer[CODEC_SERVICE_AMR_BUF_SIZE];
 static Uint32 record_count = 0;
 static Uint16 amr_len = 0;
 static Uint16 received_amr_len = 0;
-static Uint32 wav_total_len = 0;
-static Uint32 play_offset = 44U;
-static codec_service_play_source_t play_source = CODEC_SERVICE_PLAY_SOURCE_WAV;
 static Uint32 ptt_encode_sample_offset = 0;
 static Uint16 ptt_encode_frame_id = 0;
 static Uint16 ptt_encode_frame_count = 0;
-static Uint32 ptt_play_sample_count = 0;
-static Uint32 ptt_play_sample_offset = 0;
+static Uint32 play_sample_count = 0;
+static Uint32 play_sample_offset = 0;
 static int16_t ptt_pcm_tail[AMR_PCM_FRAME_SAMPLES];
 static int16_t ptt_pcm_decode_frame[AMR_PCM_FRAME_SAMPLES];
 
 /**
  * @brief 复位 codec_service 内部缓存和播放状态。
  *
- * 该函数会同时清空旧 WAV 播放状态和新 PTT PCM16 播放状态，避免上一次播放源残留。
+ * 该函数会清空录音、AMR 长度和 PCM16 播放状态，避免上一次流程残留。
  *
  * @return void
  */
@@ -49,20 +41,17 @@ void codec_service_reset(void)
     record_count = 0;
     amr_len = 0;
     received_amr_len = 0;
-    wav_total_len = 0;
-    play_offset = 44U;
-    play_source = CODEC_SERVICE_PLAY_SOURCE_WAV;
     ptt_encode_sample_offset = 0;
     ptt_encode_frame_id = 0;
     ptt_encode_frame_count = 0;
-    ptt_play_sample_count = 0;
-    ptt_play_sample_offset = 0;
+    play_sample_count = 0;
+    play_sample_offset = 0;
 }
 
 /**
  * @brief 开始新一段录音并清空相关播放状态。
  *
- * 录音开始后，旧的 AMR/WAV 长度和 PTT PCM16 播放位置都需要重新归零。
+ * 录音开始后，AMR 长度和 PCM16 播放位置都需要重新归零。
  *
  * @return void
  */
@@ -71,14 +60,11 @@ void codec_service_start_record(void)
     record_count = 0;
     amr_len = 0;
     received_amr_len = 0;
-    wav_total_len = 0;
-    play_offset = 44U;
-    play_source = CODEC_SERVICE_PLAY_SOURCE_WAV;
     ptt_encode_sample_offset = 0;
     ptt_encode_frame_id = 0;
     ptt_encode_frame_count = 0;
-    ptt_play_sample_count = 0;
-    ptt_play_sample_offset = 0;
+    play_sample_count = 0;
+    play_sample_offset = 0;
 }
 
 int16_t codec_service_record_sample(int16_t sample)
@@ -153,40 +139,84 @@ int16_t codec_service_spi_exchange_second(void)
 
 #pragma CODE_SECTION(codec_service_decode_received, "ramfuncs");
 /**
- * @brief 解码旧整段 AMR 数据到 WAV 缓冲区。
+ * @brief 将收到的整段 AMR 数据解码到 PCM16 播放缓存。
  *
- * 该函数保留原有测试流程：解码结果仍写入 wav_output_buffer，并把播放源切回 WAV。
+ * 当前第一版仍然按整段 AMR 收包。AMR 数据包含 IETF 文件头，
+ * 本函数跳过文件头后逐帧解析长度，并把每帧解码出的 160 个 sample
+ * 直接追加到 play_buf，不再生成 WAV 头或 WAV byte buffer。
  *
  * @return int16_t CODEC_SERVICE_OK 表示成功，负值表示失败。
  */
 int16_t codec_service_decode_received(void)
 {
-    int16_t result;
+    const uint8_t *amr_data;
+    Uint16 offset;
+    uint16_t frame_len;
+    uint16_t pcm_sample_count;
+    Uint16 i;
 
     if (received_amr_len == 0) {
         return CODEC_SERVICE_ERR_NO_RECORD;
     }
 
-    result = amr_decode_wav(&spi_receive_buffer[1],
-                            received_amr_len,
-                            codec_workbuf.wav_output_buffer,
-                            CODEC_SERVICE_WAV_BUF_SIZE,
-                            &wav_total_len);
-    if (result != 0) {
-        wav_total_len = 0;
+    amr_data = &spi_receive_buffer[1];
+    if ((received_amr_len < AMR_IETF_HDR_LEN) ||
+        (memcmp(amr_data, amr_file_header_magic, AMR_IETF_HDR_LEN) != 0)) {
+        play_sample_count = 0;
+        play_sample_offset = 0;
         return CODEC_SERVICE_ERR_DECODE;
     }
 
-    play_offset = 44U;
-    play_source = CODEC_SERVICE_PLAY_SOURCE_WAV;
+    if (amr_decode_frame_reset() != 0) {
+        play_sample_count = 0;
+        play_sample_offset = 0;
+        return CODEC_SERVICE_ERR_DECODE;
+    }
+
+    play_sample_count = 0;
+    play_sample_offset = 0;
+    offset = AMR_IETF_HDR_LEN;
+
+    while (offset < received_amr_len) {
+        if (amr_ietf_frame_length(amr_data[offset], &frame_len) != 0) {
+            play_sample_count = 0;
+            return CODEC_SERVICE_ERR_DECODE;
+        }
+
+        if ((frame_len == 0U) || ((Uint32)offset + frame_len > received_amr_len)) {
+            play_sample_count = 0;
+            return CODEC_SERVICE_ERR_LENGTH;
+        }
+
+        if (amr_decode_pcm16_frame(&amr_data[offset],
+                                   frame_len,
+                                   ptt_pcm_decode_frame,
+                                   AMR_PCM_FRAME_SAMPLES,
+                                   &pcm_sample_count) != 0) {
+            play_sample_count = 0;
+            return CODEC_SERVICE_ERR_DECODE;
+        }
+
+        if ((play_sample_count + pcm_sample_count) > CODEC_SERVICE_MAX_RECORD_CNT) {
+            play_sample_count = 0;
+            return CODEC_SERVICE_ERR_LENGTH;
+        }
+
+        for (i = 0; i < pcm_sample_count; i++) {
+            codec_workbuf.play_buf[play_sample_count++] = ptt_pcm_decode_frame[i];
+        }
+
+        offset = (Uint16)(offset + frame_len);
+    }
+
     return CODEC_SERVICE_OK;
 }
 
 /**
  * @brief 获取下一点播放 sample。
  *
- * WAV 播放源沿用原逻辑，从 WAV data 区两个 byte 合成为 16-bit sample；
- * PTT PCM 播放源直接从 ptt_play_buf 读取 16-bit sample，避免新 PTT 路径再经过 WAV byte buffer。
+ * 播放路径已经统一为 PCM16 缓存，因此这里直接从 play_buf 取 16-bit sample，
+ * 不再从 WAV byte buffer 合成 sample。
  *
  * @param sample 输出参数，返回下一点 16-bit PCM sample。
  *
@@ -198,23 +228,11 @@ int16_t codec_service_get_play_sample(Uint16 *sample)
         return CODEC_SERVICE_PLAY_DONE;
     }
 
-    if (play_source == CODEC_SERVICE_PLAY_SOURCE_PTT_PCM) {
-        if (ptt_play_sample_offset >= ptt_play_sample_count) {
-            return CODEC_SERVICE_PLAY_DONE;
-        }
-
-        *sample = (Uint16)codec_workbuf.ptt_play_buf[ptt_play_sample_offset++];
-        return CODEC_SERVICE_OK;
-    }
-
-    if ((wav_total_len <= 44U) || (play_offset + 1U >= wav_total_len)) {
+    if (play_sample_offset >= play_sample_count) {
         return CODEC_SERVICE_PLAY_DONE;
     }
 
-    *sample = (Uint16)codec_workbuf.wav_output_buffer[play_offset] |
-              ((Uint16)codec_workbuf.wav_output_buffer[play_offset + 1U] << 8);
-    play_offset += 2U;
-
+    *sample = (Uint16)codec_workbuf.play_buf[play_sample_offset++];
     return CODEC_SERVICE_OK;
 }
 
@@ -325,11 +343,8 @@ int16_t codec_service_ptt_encode_next(uint8_t *amr_frame,
  */
 int16_t codec_service_ptt_decode_begin(void)
 {
-    wav_total_len = 0;
-    play_offset = 44U;
-    play_source = CODEC_SERVICE_PLAY_SOURCE_PTT_PCM;
-    ptt_play_sample_count = 0;
-    ptt_play_sample_offset = 0;
+    play_sample_count = 0;
+    play_sample_offset = 0;
     received_amr_len = 0;
 
     if (amr_decode_frame_reset() != 0) {
@@ -367,12 +382,12 @@ int16_t codec_service_ptt_decode_frame(const uint8_t *amr_frame,
         return CODEC_SERVICE_ERR_DECODE;
     }
 
-    if ((ptt_play_sample_count + pcm_sample_count) > CODEC_SERVICE_MAX_RECORD_CNT) {
+    if ((play_sample_count + pcm_sample_count) > CODEC_SERVICE_MAX_RECORD_CNT) {
         return CODEC_SERVICE_ERR_LENGTH;
     }
 
     for (i = 0; i < pcm_sample_count; i++) {
-        codec_workbuf.ptt_play_buf[ptt_play_sample_count++] = ptt_pcm_decode_frame[i];
+        codec_workbuf.play_buf[play_sample_count++] = ptt_pcm_decode_frame[i];
     }
 
     received_amr_len += amr_frame_len;
@@ -388,10 +403,7 @@ int16_t codec_service_ptt_decode_frame(const uint8_t *amr_frame,
  */
 int16_t codec_service_ptt_decode_finish(void)
 {
-    play_source = CODEC_SERVICE_PLAY_SOURCE_PTT_PCM;
-    ptt_play_sample_offset = 0;
-    wav_total_len = 0;
-    play_offset = 44U;
+    play_sample_offset = 0;
     return CODEC_SERVICE_OK;
 }
 
@@ -406,35 +418,15 @@ Uint16 codec_service_get_received_amr_len(void)
 }
 
 /**
- * @brief 获取当前可播放数据长度。
+ * @brief 获取当前可播放 PCM16 sample 数。
  *
- * 旧 WAV 流程返回 WAV 文件总 byte 数；PTT PCM 流程没有 WAV 头，因此返回 PCM16 byte 数。
+ * 该值用于主状态机打印和调试，单位是 sample，不包含 WAV 头或 byte 转换。
  *
- * @return Uint32 当前播放数据长度，单位为 byte。
+ * @return Uint32 当前播放缓存中的 PCM16 sample 数。
  */
-Uint32 codec_service_get_wav_len(void)
+Uint32 codec_service_get_play_sample_count(void)
 {
-    if (play_source == CODEC_SERVICE_PLAY_SOURCE_PTT_PCM) {
-        return ptt_play_sample_count * 2UL;
-    }
-
-    return wav_total_len;
-}
-
-/**
- * @brief 获取当前播放偏移。
- *
- * 旧 WAV 流程返回 WAV byte 偏移；PTT PCM 流程返回 PCM16 sample 偏移。
- *
- * @return Uint32 当前播放偏移，单位由播放源决定。
- */
-Uint32 codec_service_get_play_offset(void)
-{
-    if (play_source == CODEC_SERVICE_PLAY_SOURCE_PTT_PCM) {
-        return ptt_play_sample_offset;
-    }
-
-    return play_offset;
+    return play_sample_count;
 }
 
 const uint8_t *codec_service_get_amr_buffer(void)
@@ -445,9 +437,4 @@ const uint8_t *codec_service_get_amr_buffer(void)
 const uint8_t *codec_service_get_spi_rx_buffer(void)
 {
     return spi_receive_buffer;
-}
-
-const uint8_t *codec_service_get_wav_buffer(void)
-{
-    return codec_workbuf.wav_output_buffer;
 }
