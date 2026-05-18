@@ -29,6 +29,17 @@ static Uint32 play_sample_offset = 0;
 static int16_t ptt_pcm_tail[AMR_PCM_FRAME_SAMPLES];
 static int16_t ptt_pcm_decode_frame[AMR_PCM_FRAME_SAMPLES];
 
+#define CODEC_SERVICE_PTT_SPI_BLOCK_MAGIC          0x5054U
+#define CODEC_SERVICE_PTT_SPI_BLOCK_VERSION        0x0001U
+#define CODEC_SERVICE_PTT_SPI_BLOCK_HEADER_WORDS   8U
+#define CODEC_SERVICE_PTT_SPI_READY_TIMEOUT_LOOP   5000000UL
+
+#define CODEC_SERVICE_PTT_SPI_BLOCK_DSP_UPLOAD_BLOCK      1U
+#define CODEC_SERVICE_PTT_SPI_BLOCK_DSP_DOWNLOAD_REQ      2U
+#define CODEC_SERVICE_PTT_SPI_BLOCK_ARTPI_DOWNLOAD_BLOCK  3U
+#define CODEC_SERVICE_PTT_SPI_BLOCK_ARTPI_NO_SESSION      4U
+#define CODEC_SERVICE_PTT_SPI_BLOCK_ARTPI_STATUS          5U
+
 /**
  * @brief 复位 codec_service 内部缓存和播放状态。
  *
@@ -132,6 +143,55 @@ int16_t codec_service_spi_exchange_second(void)
 
     if (received_amr_len != amr_len) {
         return CODEC_SERVICE_ERR_LENGTH;
+    }
+
+    return CODEC_SERVICE_OK;
+}
+
+/**
+ * @brief 执行一次 PTT SPI block 状态探针。
+ *
+ * 该函数用于验证 DSP_REQ -> SPI_READY -> SPI clock 的三线握手顺序。
+ * DSP 先拉高 DSP_REQ，请求 Art-Pi arm SPI slave DMA；等 SPI_READY 为高后，
+ * 发送一个最小 DSP_DOWNLOAD_REQ block，并期望收到 Art-Pi 的 ARTPI_STATUS
+ * block。传输结束后无论成功失败都会拉低 DSP_REQ。
+ *
+ * @return int16_t CODEC_SERVICE_OK 表示收到合法 ARTPI_STATUS，负值表示超时或 block 头不合法。
+ */
+int16_t codec_service_ptt_spi_status_probe(void)
+{
+    Uint16 *tx_words;
+    Uint16 *rx_words;
+
+    tx_words = (Uint16 *)amr_output_buffer;
+    rx_words = (Uint16 *)spi_receive_buffer;
+
+    memset(amr_output_buffer, 0, sizeof(amr_output_buffer));
+    memset(spi_receive_buffer, 0, sizeof(spi_receive_buffer));
+
+    tx_words[0] = CODEC_SERVICE_PTT_SPI_BLOCK_MAGIC;
+    tx_words[1] = CODEC_SERVICE_PTT_SPI_BLOCK_VERSION;
+    tx_words[2] = CODEC_SERVICE_PTT_SPI_BLOCK_HEADER_WORDS;
+    tx_words[3] = CODEC_SERVICE_PTT_SPI_BLOCK_DSP_DOWNLOAD_REQ;
+    tx_words[4] = 0U;
+    tx_words[5] = 0U;
+    tx_words[6] = 0U;
+    tx_words[7] = 0U;
+
+    spi_ptt_set_dsp_req(1U);
+    if (spi_ptt_wait_spi_ready(CODEC_SERVICE_PTT_SPI_READY_TIMEOUT_LOOP) != SPI_PTT_OK) {
+        spi_ptt_set_dsp_req(0U);
+        return CODEC_SERVICE_ERR_TIMEOUT;
+    }
+
+    spi_send_and_receive(tx_words, rx_words, CODEC_SERVICE_SPI_PACKET_SIZE);
+    spi_ptt_set_dsp_req(0U);
+
+    if ((rx_words[0] != CODEC_SERVICE_PTT_SPI_BLOCK_MAGIC) ||
+        (rx_words[1] != CODEC_SERVICE_PTT_SPI_BLOCK_VERSION) ||
+        (rx_words[2] != CODEC_SERVICE_PTT_SPI_BLOCK_HEADER_WORDS) ||
+        (rx_words[3] != CODEC_SERVICE_PTT_SPI_BLOCK_ARTPI_STATUS)) {
+        return CODEC_SERVICE_ERR_DECODE;
     }
 
     return CODEC_SERVICE_OK;
@@ -437,4 +497,17 @@ const uint8_t *codec_service_get_amr_buffer(void)
 const uint8_t *codec_service_get_spi_rx_buffer(void)
 {
     return spi_receive_buffer;
+}
+
+/**
+ * @brief 获取最近一次 PTT SPI block 探针收到的 word 缓冲区。
+ *
+ * 主状态机只用它打印调试头字段，不应长期保存该指针；下一次 SPI 收包会覆盖
+ * 同一块接收缓冲。
+ *
+ * @return const Uint16* 指向 SPI 接收缓冲的 16-bit word 视图。
+ */
+const Uint16 *codec_service_get_ptt_spi_rx_words(void)
+{
+    return (const Uint16 *)spi_receive_buffer;
 }

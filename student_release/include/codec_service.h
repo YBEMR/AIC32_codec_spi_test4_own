@@ -18,6 +18,7 @@
 #define CODEC_SERVICE_ERR_ENCODE        -2
 #define CODEC_SERVICE_ERR_DECODE        -3
 #define CODEC_SERVICE_ERR_LENGTH        -4
+#define CODEC_SERVICE_ERR_TIMEOUT       -5
 #define CODEC_SERVICE_PLAY_DONE          1
 #define CODEC_SERVICE_PTT_DONE           2
 
@@ -33,6 +34,7 @@ Uint32 codec_service_get_record_count(void);
 int16_t codec_service_encode_recorded(void);
 int16_t codec_service_spi_exchange_first(void);
 int16_t codec_service_spi_exchange_second(void);
+int16_t codec_service_ptt_spi_status_probe(void);
 int16_t codec_service_decode_received(void);
 int16_t codec_service_get_play_sample(Uint16 *sample);
 
@@ -55,5 +57,6 @@ Uint32 codec_service_get_play_sample_count(void);
 
 const uint8_t *codec_service_get_amr_buffer(void);
 const uint8_t *codec_service_get_spi_rx_buffer(void);
+const Uint16 *codec_service_get_ptt_spi_rx_words(void);
 
 #endif /* CODEC_SERVICE_H_ */

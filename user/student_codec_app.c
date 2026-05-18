@@ -19,7 +19,8 @@ typedef enum {
     APP_STATE_AMR_READY,
     APP_STATE_RECEIVE_READY,
     APP_STATE_DECODE,
-    APP_STATE_PLAY
+    APP_STATE_PLAY,
+    APP_STATE_PTT_PROBE
 } app_state_t;
 
 static volatile app_state_t current_state = APP_STATE_IDLE;
@@ -74,6 +75,7 @@ int16_t main(int16_t argc, char **argv)
 
     InitSpiaGpio();
     spi_ready_init(SPI_READY_IRQn);
+    spi_ptt_gpio_init();
     spi_init();
 
     InitMcbspaGpio();
@@ -188,6 +190,31 @@ int16_t main(int16_t argc, char **argv)
                 UARTa_SendStringAndNumber("Decoding failed: ", result, "\r\n");
                 current_state = APP_STATE_IDLE;
             }
+        } else if (current_state == APP_STATE_PTT_PROBE) {
+            const Uint16 *ptt_rx_words;
+            Uint16 debug_i;
+
+            UARTa_SendString("### Starting PTT SPI status probe ###\r\n");
+            result = codec_service_ptt_spi_status_probe();
+            ptt_rx_words = codec_service_get_ptt_spi_rx_words();
+
+            if (result == CODEC_SERVICE_OK) {
+                UARTa_SendString("PTT SPI status probe successful.\r\n");
+                UARTa_SendStringAndHex("PTT rx magic: 0x", ptt_rx_words[0], "\r\n");
+                UARTa_SendStringAndHex("PTT rx type: 0x", ptt_rx_words[3], "\r\n");
+                UARTa_SendStringAndNumber("PTT rx session: ", ptt_rx_words[4], "\r\n");
+                UARTa_SendStringAndNumber("PTT rx state: ", ptt_rx_words[5], "\r\n");
+            } else {
+                UARTa_SendStringAndNumber("PTT SPI status probe failed: ", result, "\r\n");
+                UARTa_SendString("PTT raw rx[0..7]: ");
+                for (debug_i = 0; debug_i < 8U; debug_i++) {
+                    UARTa_SendHex(ptt_rx_words[debug_i]);
+                    UARTa_SendString(" ");
+                }
+                UARTa_SendString("\r\n");
+            }
+
+            current_state = APP_STATE_IDLE;
         }
     }
 }
@@ -236,6 +263,8 @@ interrupt void TIM0_IRQn(void)
     if (key_decode_pressed_flag && (tick_count - key_decode_press_time >= KEY_DEBOUNCE_MS / 10U)) {
         if (current_state == APP_STATE_RECEIVE_READY) {
             current_state = APP_STATE_DECODE;
+        } else if (current_state == APP_STATE_IDLE) {
+            current_state = APP_STATE_PTT_PROBE;
         }
 
         key_decode_pressed_flag = 0;
@@ -249,7 +278,6 @@ interrupt void TIM0_IRQn(void)
 
 interrupt void SPI_READY_IRQn(void)
 {
-    UARTa_SendString("nnnnnnnnnnnnnnnnn\r\n");
     spi_ready_flag = 1;
     PieCtrlRegs.PIEACK.bit.ACK12 = 1;
 }
