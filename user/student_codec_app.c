@@ -35,6 +35,7 @@ static volatile Uint16 play_sample_hold = 0;
 
 #define KEY_DEBOUNCE_MS 260U
 #define APP_MONO_RECORD_WORD_SELECT 0U
+#define APP_USE_PTT_BLOCK_UPLOAD 1U
 
 extern Uint16 AmrFastLoadStart;
 extern Uint16 AmrFastLoadEnd;
@@ -123,7 +124,27 @@ int16_t main(int16_t argc, char **argv)
             UARTa_SendStringAndNumber("Encode time(ms): ", encode_elapsed_ms, "\r\n");
             if (result == CODEC_SERVICE_OK) {
                 UARTa_SendStringAndNumber("Encoding successful, AMR length: ", codec_service_get_amr_len(), "\r\n");
+#if APP_USE_PTT_BLOCK_UPLOAD
+                UARTa_SendString("### Starting PTT SPI block upload ###\r\n");
+                result = codec_service_ptt_spi_upload_encoded();
+                if (result == CODEC_SERVICE_OK) {
+                    UARTa_SendString("PTT SPI block upload successful.\r\n");
+                } else {
+                    const Uint16 *ptt_rx_words = codec_service_get_ptt_spi_rx_words();
+                    Uint16 debug_i;
+
+                    UARTa_SendStringAndNumber("PTT SPI block upload failed: ", result, "\r\n");
+                    UARTa_SendString("PTT status rx[0..7]: ");
+                    for (debug_i = 0; debug_i < 8U; debug_i++) {
+                        UARTa_SendHex(ptt_rx_words[debug_i]);
+                        UARTa_SendString(" ");
+                    }
+                    UARTa_SendString("\r\n");
+                }
+                current_state = APP_STATE_IDLE;
+#else
                 current_state = APP_STATE_AMR_READY;
+#endif
             } else {
                 UARTa_SendStringAndNumber("Encoding failed: ", result, "\r\n");
                 current_state = APP_STATE_IDLE;

@@ -156,7 +156,7 @@ int16_t amr_encode_pcm16_frame(const int16_t *pcm_frame,
         *amr_frame_len = 0;
         return -1;
     }
-
+    // 会复制 10 个 16-bit 单元，刚好等于 10 个 Uint16
     memcpy(amr_frame, out_bytes, nbytes);
     *amr_frame_len = (uint16_t)nbytes;
     return 0;
