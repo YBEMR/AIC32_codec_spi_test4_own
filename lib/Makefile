@@ -119,13 +119,16 @@ EXINT_SRCS := exint_lib/exint.c
 LED_SRCS := led_lib/leds.c
 KEY_SRCS := key_lib/key.c
 CODEC_SERVICE_SRCS := codec_service_lib/codec_service.c
+CODEC_SERVICE_SRCS += codec_service_lib/codec_service_ptt_spi.c
+CODEC_SERVICE_SRCS += codec_service_lib/codec_service_ptt_frame.c
 SPI_HDRS := spi_lib/spi.h
 UARTA_HDRS := uarta_lib/uart.h
 TIMER0_HDRS := timer0_lib/timer.h
 EXINT_HDRS := exint_lib/exint.h
 LED_HDRS := led_lib/leds.h
 KEY_HDRS := key_lib/key.h
-CODEC_SERVICE_HDRS := codec_service_lib/codec_service.h audio_lib/audio.h spi_lib/spi.h
+CODEC_SERVICE_HDRS := codec_service_lib/codec_service.h codec_service_lib/codec_service_internal.h
+CODEC_SERVICE_HDRS += audio_lib/audio.h spi_lib/spi.h
 
 SPI_OBJS := $(patsubst spi_lib/%.c,$(BUILD_DIR)/spi_lib/%.obj,$(SPI_SRCS))
 UARTA_OBJS := $(patsubst uarta_lib/%.c,$(BUILD_DIR)/uarta_lib/%.obj,$(UARTA_SRCS))
