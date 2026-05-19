@@ -220,6 +220,30 @@ int16 spi_ptt_wait_spi_ready(Uint32 timeout_loop)
 }
 
 /**
+ * @brief 阻塞等待 SPI_READY 变为低电平。
+ *
+ * 每次 PTT SPI transaction 结束后，DSP 会先拉低 DSP_REQ，再等待 Art-Pi
+ * 拉低 SPI_READY。这样下一次拉高 DSP_REQ 前，可以确认 Art-Pi 已经退出
+ * 上一次 transaction 的 ready 状态。
+ *
+ * @param timeout_loop 最大轮询次数，设置为 0 表示不等待直接检查一次。
+ *
+ * @return int16 SPI_PTT_OK 表示 SPI_READY 已经为低，SPI_PTT_ERR_TIMEOUT 表示超时。
+ */
+int16 spi_ptt_wait_spi_not_ready(Uint32 timeout_loop)
+{
+    Uint32 count;
+
+    for (count = 0; count <= timeout_loop; count++) {
+        if (spi_ptt_is_spi_ready() == 0U) {
+            return SPI_PTT_OK;
+        }
+    }
+
+    return SPI_PTT_ERR_TIMEOUT;
+}
+
+/**
  * @brief 阻塞等待 DATA_READY 变为高电平。
  *
  * 当前阶段 DATA_READY 只作为后续 session 下载通知的预留接口，先提供

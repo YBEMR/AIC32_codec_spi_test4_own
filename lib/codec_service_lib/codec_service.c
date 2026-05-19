@@ -41,6 +41,8 @@ static int16_t ptt_pcm_decode_frame[AMR_PCM_FRAME_SAMPLES];
 #define CODEC_SERVICE_PTT_SPI_BLOCK_VERSION        0x0001U
 #define CODEC_SERVICE_PTT_SPI_BLOCK_HEADER_WORDS   8U
 #define CODEC_SERVICE_PTT_SPI_READY_TIMEOUT_LOOP   5000000UL
+#define CODEC_SERVICE_PTT_SPI_DONE_TIMEOUT_LOOP    5000000UL
+#define CODEC_SERVICE_PTT_DSP_REQ_GUARD_LOOP       20000UL
 
 #define CODEC_SERVICE_PTT_SPI_BLOCK_DSP_UPLOAD_BLOCK      1U
 #define CODEC_SERVICE_PTT_SPI_BLOCK_DSP_DOWNLOAD_REQ      2U
@@ -53,6 +55,24 @@ static int16_t ptt_pcm_decode_frame[AMR_PCM_FRAME_SAMPLES];
 #define CODEC_SERVICE_PTT_SPI_PAYLOAD_WORD0               CODEC_SERVICE_PTT_SPI_BLOCK_HEADER_WORDS
 #define CODEC_SERVICE_PTT_SPI_MAX_PAYLOAD_BYTES \
     ((CODEC_SERVICE_SPI_PACKET_SIZE - CODEC_SERVICE_PTT_SPI_BLOCK_HEADER_WORDS) * 2U)
+
+/**
+ * @brief 在 DSP_REQ 拉低后插入一小段保护延时。
+ *
+ * 该延时让 Art-Pi 的轮询线程有机会稳定采样到 DSP_REQ 低电平，避免 DSP
+ * 很快再次拉高请求线时，Art-Pi 把下一次请求误认为上一次请求尚未释放。
+ *
+ * @param loop_count 软件空循环次数。
+ *
+ * @return void
+ */
+static void codec_service_ptt_spi_guard_delay(Uint32 loop_count)
+{
+    volatile Uint32 i;
+
+    for (i = 0; i < loop_count; i++) {
+    }
+}
 
 /**
  * @brief 复位 codec_service 内部缓存和播放状态。
@@ -173,14 +193,23 @@ int16_t codec_service_spi_exchange_second(void)
  */
 static int16_t codec_service_ptt_spi_transfer_block(void)
 {
+    if (spi_ptt_wait_spi_not_ready(CODEC_SERVICE_PTT_SPI_DONE_TIMEOUT_LOOP) != SPI_PTT_OK) {
+        return CODEC_SERVICE_ERR_TIMEOUT;
+    }
+
     spi_ptt_set_dsp_req(1U);
     if (spi_ptt_wait_spi_ready(CODEC_SERVICE_PTT_SPI_READY_TIMEOUT_LOOP) != SPI_PTT_OK) {
         spi_ptt_set_dsp_req(0U);
+        codec_service_ptt_spi_guard_delay(CODEC_SERVICE_PTT_DSP_REQ_GUARD_LOOP);
         return CODEC_SERVICE_ERR_TIMEOUT;
     }
 
     spi_send_and_receive(ptt_spi_tx_words, ptt_spi_rx_words, CODEC_SERVICE_SPI_PACKET_SIZE);
     spi_ptt_set_dsp_req(0U);
+    if (spi_ptt_wait_spi_not_ready(CODEC_SERVICE_PTT_SPI_DONE_TIMEOUT_LOOP) != SPI_PTT_OK) {
+        return CODEC_SERVICE_ERR_TIMEOUT;
+    }
+    codec_service_ptt_spi_guard_delay(CODEC_SERVICE_PTT_DSP_REQ_GUARD_LOOP);
 
     return CODEC_SERVICE_OK;
 }
@@ -400,6 +429,9 @@ int16_t codec_service_ptt_spi_upload_encoded(void)
             return result;
         }
 
+        // 检查 Art-Pi 返回的 ACK 状态，确认上一块数据已经正确收到并存储；
+        // 如果 ACK 不对，直接返回错误，不继续发后续块了
+        // 后续版本可以在这里加重传机制，但目前第一版先不做重传了，直接暴露错误让上层处理
         result = codec_service_ptt_spi_check_status(session_id, block_id);
         if (result != CODEC_SERVICE_OK) {
             return result;
