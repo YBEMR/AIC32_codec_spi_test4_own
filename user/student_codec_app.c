@@ -21,6 +21,7 @@ typedef enum {
     APP_STATE_DECODE,
     APP_STATE_PLAY,
     APP_STATE_PTT_PROBE,
+    APP_STATE_PTT_FLOOR_REQUEST,
     APP_STATE_PTT_DOWNLOAD
 } app_state_t;
 
@@ -116,7 +117,30 @@ int16_t main(int16_t argc, char **argv)
             current_state = APP_STATE_PTT_DOWNLOAD;
         }
 
-        if (current_state == APP_STATE_ENCODE) {
+        if (current_state == APP_STATE_PTT_FLOOR_REQUEST) {
+            UARTa_SendString("### Starting PTT floor request ###\r\n");
+            result = codec_service_ptt_spi_floor_request();
+            if (result == CODEC_SERVICE_OK) {
+                UARTa_SendString("PTT floor granted, record start.\r\n");
+                codec_service_start_record();
+                mcbsp_word_phase = 0;
+                play_sample_hold = 0;
+                current_state = APP_STATE_RECORD;
+            } else {
+                const Uint16 *ptt_rx_words = codec_service_get_ptt_spi_rx_words();
+                Uint16 debug_i;
+
+                UARTa_SendStringAndNumber("PTT floor request failed: ", result, "\r\n");
+                UARTa_SendString("PTT raw rx[0..7]: ");
+                for (debug_i = 0; debug_i < 8U; debug_i++) {
+                    UARTa_SendHex(ptt_rx_words[debug_i]);
+                    UARTa_SendString(" ");
+                }
+                UARTa_SendString("\r\n");
+                codec_service_ptt_spi_floor_release();
+                current_state = APP_STATE_IDLE;
+            }
+        } else if (current_state == APP_STATE_ENCODE) {
             Uint32 encode_start_tick;
             Uint32 encode_elapsed_ms;
 
@@ -146,12 +170,18 @@ int16_t main(int16_t argc, char **argv)
                     }
                     UARTa_SendString("\r\n");
                 }
+                if (codec_service_ptt_spi_floor_release() == CODEC_SERVICE_OK) {
+                    UARTa_SendString("PTT floor release sent.\r\n");
+                } else {
+                    UARTa_SendString("PTT floor release failed.\r\n");
+                }
                 current_state = APP_STATE_IDLE;
 #else
                 current_state = APP_STATE_AMR_READY;
 #endif
             } else {
                 UARTa_SendStringAndNumber("Encoding failed: ", result, "\r\n");
+                codec_service_ptt_spi_floor_release();
                 current_state = APP_STATE_IDLE;
             }
         } else if (current_state == APP_STATE_AMR_READY) {
@@ -294,11 +324,8 @@ interrupt void TIM0_IRQn(void)
 
     if (key_encode_pressed_flag && (tick_count - key_encode_press_time >= KEY_DEBOUNCE_MS / 10U)) {
         if (current_state == APP_STATE_IDLE) {
-            codec_service_start_record();
-            mcbsp_word_phase = 0;
-            play_sample_hold = 0;
-            current_state = APP_STATE_RECORD;
-            UARTa_SendString("Record start.\r\n");
+            current_state = APP_STATE_PTT_FLOOR_REQUEST;
+            UARTa_SendString("PTT key pressed, requesting floor.\r\n");
         } else if (current_state == APP_STATE_RECORD) {
             mcbsp_word_phase = 0;
             current_state = APP_STATE_ENCODE;

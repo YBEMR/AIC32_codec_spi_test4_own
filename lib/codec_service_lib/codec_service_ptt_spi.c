@@ -26,11 +26,21 @@ static Uint16 ptt_spi_session_id = 0;
 #define CODEC_SERVICE_PTT_SPI_BLOCK_ARTPI_STATUS          5U
 // DSP填充到SPI block header的状态查询，Art-Pi在收到该block时把上一次处理结果返回给DSP
 #define CODEC_SERVICE_PTT_SPI_BLOCK_DSP_STATUS_POLL       6U
+// 申请话权
+#define CODEC_SERVICE_PTT_SPI_BLOCK_DSP_FLOOR_REQUEST     7U
+// 释放话权
+#define CODEC_SERVICE_PTT_SPI_BLOCK_DSP_FLOOR_RELEASE     8U
+// 接收到回复：话权申请通过
+#define CODEC_SERVICE_PTT_SPI_BLOCK_ARTPI_FLOOR_GRANTED   9U
+// 接收到回复：话权申请失败
+#define CODEC_SERVICE_PTT_SPI_BLOCK_ARTPI_FLOOR_DENIED    10U
 
 #define CODEC_SERVICE_PTT_SPI_STATUS_OK                   0U
 #define CODEC_SERVICE_PTT_SPI_PAYLOAD_WORD0               CODEC_SERVICE_PTT_SPI_BLOCK_HEADER_WORDS
 #define CODEC_SERVICE_PTT_SPI_MAX_PAYLOAD_BYTES \
     ((CODEC_SERVICE_SPI_PACKET_SIZE - CODEC_SERVICE_PTT_SPI_BLOCK_HEADER_WORDS) * 2U)
+#define CODEC_SERVICE_PTT_FLOOR_POLL_MAX                  100U
+#define CODEC_SERVICE_PTT_FLOOR_POLL_GUARD_LOOP           80000UL
 
 /**
  * @brief 复位 PTT SPI block 上传模块内部状态。
@@ -73,6 +83,7 @@ static void codec_service_ptt_spi_guard_delay(Uint32 loop_count)
  */
 static int16_t codec_service_ptt_spi_transfer_block(void)
 {
+    // 等待上一次 transaction 完全结束，DSP 已经拉低 DSP_REQ，Art-Pi 也已经拉低 SPI_READY
     if (spi_ptt_wait_spi_not_ready(CODEC_SERVICE_PTT_SPI_DONE_TIMEOUT_LOOP) != SPI_PTT_OK) {
         return CODEC_SERVICE_ERR_TIMEOUT;
     }
@@ -234,6 +245,118 @@ static int16_t codec_service_ptt_spi_check_status(Uint16 session_id, Uint16 bloc
     }
 
     return CODEC_SERVICE_OK;
+}
+
+/**
+ * @brief 检查 PTT SPI rx buffer 中的公共 block 头。
+ *
+ * 话权申请、下载和状态查询都复用同一个 8-word block 头。这里集中校验
+ * magic/version/header_words，避免每个控制接口重复写判断。
+ *
+ * @return int16_t CODEC_SERVICE_OK 表示公共头合法，负值表示不是 PTT block。
+ */
+static int16_t codec_service_ptt_spi_check_common_header(void)
+{
+    if ((ptt_spi_rx_words[0] != CODEC_SERVICE_PTT_SPI_BLOCK_MAGIC) ||
+        (ptt_spi_rx_words[1] != CODEC_SERVICE_PTT_SPI_BLOCK_VERSION) ||
+        (ptt_spi_rx_words[2] != CODEC_SERVICE_PTT_SPI_BLOCK_HEADER_WORDS)) {
+        return CODEC_SERVICE_ERR_DECODE;
+    }
+
+    return CODEC_SERVICE_OK;
+}
+
+/**
+ * @brief 申请 PTT 单工话权。
+ *
+ * DSP 复用录音键作为 PTT 键。按键触发后先调用本接口向本地 Art-Pi 发送
+ * DSP_FLOOR_REQUEST；Art-Pi 通过 UDP 与对端做单工仲裁，DSP 再用
+ * DSP_STATUS_POLL 轮询结果。收到 ARTPI_FLOOR_GRANTED 后保存 Art-Pi
+ * 分配的 session_id，后续 AMR 上传沿用该 session_id。
+ *
+ * @return int16_t CODEC_SERVICE_OK 表示话权授权成功，负值表示拒绝、超时或 block 不合法。
+ */
+int16_t codec_service_ptt_spi_floor_request(void)
+{
+    Uint16 poll_i;
+    Uint16 rx_type;
+    int16_t result;
+
+    ptt_spi_session_id = 0U;
+    codec_service_ptt_spi_clear_words();
+    // 告诉 Art-Pi：我想申请话权，请你去和对端 Art-Pi 仲裁一下
+    codec_service_ptt_spi_fill_header(CODEC_SERVICE_PTT_SPI_BLOCK_DSP_FLOOR_REQUEST,
+                                      0U,
+                                      0U,
+                                      0U,
+                                      0U);
+
+    result = codec_service_ptt_spi_transfer_block();
+    if (result != CODEC_SERVICE_OK) {
+        return result;
+    }
+
+    for (poll_i = 0U; poll_i < CODEC_SERVICE_PTT_FLOOR_POLL_MAX; poll_i++) {
+        if (codec_service_ptt_spi_check_common_header() == CODEC_SERVICE_OK) {
+            rx_type = ptt_spi_rx_words[3];
+            if (rx_type == CODEC_SERVICE_PTT_SPI_BLOCK_ARTPI_FLOOR_GRANTED) {
+                ptt_spi_session_id = ptt_spi_rx_words[4];
+                return (ptt_spi_session_id == 0U) ? CODEC_SERVICE_ERR_REMOTE : CODEC_SERVICE_OK;
+            }
+            if (rx_type == CODEC_SERVICE_PTT_SPI_BLOCK_ARTPI_FLOOR_DENIED) {
+                ptt_spi_session_id = 0U;
+                return CODEC_SERVICE_ERR_REMOTE;
+            }
+            if ((rx_type == CODEC_SERVICE_PTT_SPI_BLOCK_ARTPI_STATUS) &&
+                (ptt_spi_rx_words[4] != 0U)) {
+                ptt_spi_session_id = ptt_spi_rx_words[4];
+            }
+        }
+
+        codec_service_ptt_spi_guard_delay(CODEC_SERVICE_PTT_FLOOR_POLL_GUARD_LOOP);
+        codec_service_ptt_spi_clear_words();
+        codec_service_ptt_spi_fill_header(CODEC_SERVICE_PTT_SPI_BLOCK_DSP_STATUS_POLL,
+                                          ptt_spi_session_id,
+                                          0U,
+                                          0U,
+                                          0U);
+
+        result = codec_service_ptt_spi_transfer_block();
+        if (result != CODEC_SERVICE_OK) {
+            return result;
+        }
+    }
+
+    return CODEC_SERVICE_ERR_TIMEOUT;
+}
+
+/**
+ * @brief 释放当前 PTT 单工话权。
+ *
+ * 录音取消、编码失败或上传失败时，DSP 用该接口通知本地 Art-Pi 清理当前
+ * floor session。上传成功时 Art-Pi 可能会等 UDP session 发送完成后再真正
+ * 对外释放话权，因此这里不等待远端确认。
+ *
+ * @return int16_t CODEC_SERVICE_OK 表示 SPI release block 已发送，负值表示握手失败。
+ */
+int16_t codec_service_ptt_spi_floor_release(void)
+{
+    int16_t result;
+
+    if (ptt_spi_session_id == 0U) {
+        return CODEC_SERVICE_OK;
+    }
+
+    codec_service_ptt_spi_clear_words();
+    codec_service_ptt_spi_fill_header(CODEC_SERVICE_PTT_SPI_BLOCK_DSP_FLOOR_RELEASE,
+                                      ptt_spi_session_id,
+                                      0U,
+                                      0U,
+                                      0U);
+
+    result = codec_service_ptt_spi_transfer_block();
+    ptt_spi_session_id = 0U;
+    return result;
 }
 
 /**
@@ -407,9 +530,8 @@ int16_t codec_service_ptt_spi_upload_encoded(void)
         return CODEC_SERVICE_ERR_LENGTH;
     }
 
-    ptt_spi_session_id++;
     if (ptt_spi_session_id == 0U) {
-        ptt_spi_session_id = 1U;
+        return CODEC_SERVICE_ERR_REMOTE;
     }
     session_id = ptt_spi_session_id;
     amr_payload = &amr_output_buffer[1];
