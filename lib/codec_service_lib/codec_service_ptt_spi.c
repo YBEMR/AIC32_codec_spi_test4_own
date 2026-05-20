@@ -22,7 +22,9 @@ static Uint16 ptt_spi_session_id = 0;
 #define CODEC_SERVICE_PTT_SPI_BLOCK_DSP_DOWNLOAD_REQ      2U
 #define CODEC_SERVICE_PTT_SPI_BLOCK_ARTPI_DOWNLOAD_BLOCK  3U
 #define CODEC_SERVICE_PTT_SPI_BLOCK_ARTPI_NO_SESSION      4U
+// ART-PI填充到回复DSP的SPI block header，表示上一次处理结果，DSP通过轮询查询
 #define CODEC_SERVICE_PTT_SPI_BLOCK_ARTPI_STATUS          5U
+// DSP填充到SPI block header的状态查询，Art-Pi在收到该block时把上一次处理结果返回给DSP
 #define CODEC_SERVICE_PTT_SPI_BLOCK_DSP_STATUS_POLL       6U
 
 #define CODEC_SERVICE_PTT_SPI_STATUS_OK                   0U
@@ -168,6 +170,44 @@ static void codec_service_ptt_spi_pack_payload(const uint8_t *payload, Uint16 pa
 }
 
 /**
+ * @brief 将 SPI 16-bit word payload 解包为 AMR byte 数据。
+ *
+ * Art-Pi 下行下载时使用与 DSP 上传相同的 byte/word 规则：每个 word 的
+ * 高字节是前一个 AMR byte，低字节是后一个 AMR byte；payload 为奇数字节
+ * 时最后一个 word 的低字节是补零，不写入目标缓存。
+ *
+ * @param dst 输出 AMR byte 缓冲区。
+ * @param payload_bytes 需要解包的逻辑 payload byte 数。
+ *
+ * @return int16_t CODEC_SERVICE_OK 表示解包成功，负值表示长度非法。
+ */
+static int16_t codec_service_ptt_spi_unpack_payload(uint8_t *dst, Uint16 payload_bytes)
+{
+    Uint16 i;
+    Uint16 word_count;
+    Uint16 word;
+
+    if ((dst == 0) || (payload_bytes == 0U)) {
+        return CODEC_SERVICE_ERR_LENGTH;
+    }
+
+    word_count = (Uint16)((payload_bytes + 1U) / 2U);
+    if ((CODEC_SERVICE_PTT_SPI_PAYLOAD_WORD0 + word_count) > CODEC_SERVICE_SPI_PACKET_SIZE) {
+        return CODEC_SERVICE_ERR_LENGTH;
+    }
+
+    for (i = 0U; i < word_count; i++) {
+        word = ptt_spi_rx_words[CODEC_SERVICE_PTT_SPI_PAYLOAD_WORD0 + i];
+        dst[i * 2U] = (uint8_t)((word >> 8) & 0x00FFU);
+        if (((i * 2U) + 1U) < payload_bytes) {
+            dst[(i * 2U) + 1U] = (uint8_t)(word & 0x00FFU);
+        }
+    }
+
+    return CODEC_SERVICE_OK;
+}
+
+/**
  * @brief 校验 Art-Pi 返回的 PTT status block。
  *
  * DSP 上传当前 block 后，会再发一次 DSP_STATUS_POLL。由于 Art-Pi 的
@@ -193,6 +233,114 @@ static int16_t codec_service_ptt_spi_check_status(Uint16 session_id, Uint16 bloc
         return CODEC_SERVICE_ERR_REMOTE;
     }
 
+    return CODEC_SERVICE_OK;
+}
+
+/**
+ * @brief 从 Art-Pi 下载已经收齐的远端 AMR session。
+ *
+ * 该接口只在 DATA_READY 为高时使用。DSP 每次主动发送 DSP_DOWNLOAD_REQ，
+ * Art-Pi 在同一次 SPI transaction 中返回预装好的 ARTPI_DOWNLOAD_BLOCK。
+ * DSP 按 block_id 顺序解包到 spi_receive_buffer + 1，并设置 received_amr_len，
+ * 后续复用 codec_service_decode_received() 解码播放。
+ *
+ * @return int16_t CODEC_SERVICE_OK 表示下载完成，负值表示无数据、握手失败或 block 校验失败。
+ */
+int16_t codec_service_ptt_spi_download_received(void)
+{
+    Uint16 block_id;
+    Uint16 block_count;
+    Uint16 rx_type;
+    Uint16 rx_session_id;
+    Uint16 rx_block_id;
+    Uint16 rx_block_count;
+    Uint16 payload_bytes;
+    Uint16 received_bytes;
+    Uint16 session_id;
+    int16_t result;
+
+    if (spi_ptt_is_data_ready() == 0U) {
+        return CODEC_SERVICE_ERR_NO_RECORD;
+    }
+
+    received_amr_len = 0U;
+    received_bytes = 0U;
+    session_id = 0U;
+    block_count = 0U;
+
+    for (block_id = 0U; ; block_id++) {
+        codec_service_ptt_spi_clear_words();
+        codec_service_ptt_spi_fill_header(CODEC_SERVICE_PTT_SPI_BLOCK_DSP_DOWNLOAD_REQ,
+                                          session_id,
+                                          block_id,
+                                          block_count,
+                                          0U);
+
+        result = codec_service_ptt_spi_transfer_block();
+        if (result != CODEC_SERVICE_OK) {
+            received_amr_len = 0U;
+            return result;
+        }
+
+        if ((ptt_spi_rx_words[0] != CODEC_SERVICE_PTT_SPI_BLOCK_MAGIC) ||
+            (ptt_spi_rx_words[1] != CODEC_SERVICE_PTT_SPI_BLOCK_VERSION) ||
+            (ptt_spi_rx_words[2] != CODEC_SERVICE_PTT_SPI_BLOCK_HEADER_WORDS)) {
+            received_amr_len = 0U;
+            return CODEC_SERVICE_ERR_DECODE;
+        }
+
+        rx_type = ptt_spi_rx_words[3];
+        if (rx_type == CODEC_SERVICE_PTT_SPI_BLOCK_ARTPI_NO_SESSION) {
+            received_amr_len = 0U;
+            return (block_id == 0U) ? CODEC_SERVICE_ERR_NO_RECORD : CODEC_SERVICE_ERR_REMOTE;
+        }
+
+        if (rx_type != CODEC_SERVICE_PTT_SPI_BLOCK_ARTPI_DOWNLOAD_BLOCK) {
+            received_amr_len = 0U;
+            return CODEC_SERVICE_ERR_DECODE;
+        }
+
+        rx_session_id = ptt_spi_rx_words[4];
+        rx_block_id = ptt_spi_rx_words[5];
+        rx_block_count = ptt_spi_rx_words[6];
+        payload_bytes = ptt_spi_rx_words[7];
+
+        if (block_id == 0U) {
+            if (rx_block_count == 0U) {
+                received_amr_len = 0U;
+                return CODEC_SERVICE_ERR_LENGTH;
+            }
+            session_id = rx_session_id;
+            block_count = rx_block_count;
+        }
+
+        if ((rx_session_id != session_id) ||
+            (rx_block_id != block_id) ||
+            (rx_block_count != block_count) ||
+            (payload_bytes == 0U)) {
+            received_amr_len = 0U;
+            return CODEC_SERVICE_ERR_REMOTE;
+        }
+
+        if (((Uint32)received_bytes + payload_bytes) > (CODEC_SERVICE_AMR_BUF_SIZE - 1U)) {
+            received_amr_len = 0U;
+            return CODEC_SERVICE_ERR_LENGTH;
+        }
+
+        result = codec_service_ptt_spi_unpack_payload(&spi_receive_buffer[1U + received_bytes],
+                                                      payload_bytes);
+        if (result != CODEC_SERVICE_OK) {
+            received_amr_len = 0U;
+            return result;
+        }
+
+        received_bytes = (Uint16)(received_bytes + payload_bytes);
+        if ((block_id + 1U) >= block_count) {
+            break;
+        }
+    }
+
+    received_amr_len = received_bytes;
     return CODEC_SERVICE_OK;
 }
 

@@ -37,6 +37,7 @@ int16_t codec_service_spi_exchange_first(void);
 int16_t codec_service_spi_exchange_second(void);
 int16_t codec_service_ptt_spi_status_probe(void);
 int16_t codec_service_ptt_spi_upload_encoded(void);
+int16_t codec_service_ptt_spi_download_received(void);
 int16_t codec_service_decode_received(void);
 int16_t codec_service_get_play_sample(Uint16 *sample);
 

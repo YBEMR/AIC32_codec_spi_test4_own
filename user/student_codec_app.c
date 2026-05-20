@@ -20,7 +20,8 @@ typedef enum {
     APP_STATE_RECEIVE_READY,
     APP_STATE_DECODE,
     APP_STATE_PLAY,
-    APP_STATE_PTT_PROBE
+    APP_STATE_PTT_PROBE,
+    APP_STATE_PTT_DOWNLOAD
 } app_state_t;
 
 static volatile app_state_t current_state = APP_STATE_IDLE;
@@ -110,6 +111,10 @@ int16_t main(int16_t argc, char **argv)
     while (1) {
         LED1_TOGGLE;
         delay();
+
+        if ((current_state == APP_STATE_IDLE) && (spi_ptt_is_data_ready() != 0U)) {
+            current_state = APP_STATE_PTT_DOWNLOAD;
+        }
 
         if (current_state == APP_STATE_ENCODE) {
             Uint32 encode_start_tick;
@@ -236,6 +241,29 @@ int16_t main(int16_t argc, char **argv)
             }
 
             current_state = APP_STATE_IDLE;
+        } else if (current_state == APP_STATE_PTT_DOWNLOAD) {
+            const Uint16 *ptt_rx_words;
+            Uint16 debug_i;
+
+            UARTa_SendString("### Starting PTT SPI downlink download ###\r\n");
+            result = codec_service_ptt_spi_download_received();
+            ptt_rx_words = codec_service_get_ptt_spi_rx_words();
+
+            if (result == CODEC_SERVICE_OK) {
+                UARTa_SendStringAndNumber("PTT downlink download successful, AMR length: ",
+                                          codec_service_get_received_amr_len(),
+                                          "\r\n");
+                current_state = APP_STATE_DECODE;
+            } else {
+                UARTa_SendStringAndNumber("PTT downlink download failed: ", result, "\r\n");
+                UARTa_SendString("PTT raw rx[0..7]: ");
+                for (debug_i = 0; debug_i < 8U; debug_i++) {
+                    UARTa_SendHex(ptt_rx_words[debug_i]);
+                    UARTa_SendString(" ");
+                }
+                UARTa_SendString("\r\n");
+                current_state = APP_STATE_IDLE;
+            }
         }
     }
 }

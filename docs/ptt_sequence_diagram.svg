@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1520" height="2558" viewBox="0 0 1520 2558">
+<defs>
+<marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#2563eb" /></marker>
+</defs>
+<rect width="100%" height="100%" fill="#f8fafc" />
+<text x="760.0" y="28.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="22" font-weight="700" fill="#0f172a" text-anchor="middle"><tspan x="760.0" dy="0">当前 PTT 数据流时序图</tspan></text><text x="760.0" y="54.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#475569" text-anchor="middle"><tspan x="760.0" dy="0">DSP SPI 传输、Art-Pi SPI block、Art-Pi UDP session、接收端下载播放</tspan></text><rect x="0.0" y="42.0" width="160" height="34" rx="8" fill="#eef2ff" stroke="#4f46e5" />
+<text x="80.0" y="64.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle"><tspan x="80.0" dy="0">发送端 DSP</tspan></text>
+<rect x="238.0" y="42.0" width="160" height="34" rx="8" fill="#eef2ff" stroke="#4f46e5" />
+<text x="318.0" y="64.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle"><tspan x="318.0" dy="0">本地 Art-Pi SPI</tspan></text>
+<rect x="476.0" y="42.0" width="160" height="34" rx="8" fill="#eef2ff" stroke="#4f46e5" />
+<text x="556.0" y="64.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle"><tspan x="556.0" dy="0">本地 Art-Pi UDP</tspan></text>
+<rect x="714.0" y="42.0" width="160" height="34" rx="8" fill="#eef2ff" stroke="#4f46e5" />
+<text x="794.0" y="64.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle"><tspan x="794.0" dy="0">对端 Art-Pi UDP</tspan></text>
+<rect x="952.0" y="42.0" width="160" height="34" rx="8" fill="#eef2ff" stroke="#4f46e5" />
+<text x="1032.0" y="64.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle"><tspan x="1032.0" dy="0">对端 Art-Pi SPI</tspan></text>
+<rect x="1190.0" y="42.0" width="160" height="34" rx="8" fill="#eef2ff" stroke="#4f46e5" />
+<text x="1270.0" y="64.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle"><tspan x="1270.0" dy="0">接收端 DSP</tspan></text>
+<line x1="80.0" y1="90" x2="80.0" y2="2520" stroke="#cbd5e1" stroke-dasharray="6 6" />
+<line x1="318.0" y1="90" x2="318.0" y2="2520" stroke="#cbd5e1" stroke-dasharray="6 6" />
+<line x1="556.0" y1="90" x2="556.0" y2="2520" stroke="#cbd5e1" stroke-dasharray="6 6" />
+<line x1="794.0" y1="90" x2="794.0" y2="2520" stroke="#cbd5e1" stroke-dasharray="6 6" />
+<line x1="1032.0" y1="90" x2="1032.0" y2="2520" stroke="#cbd5e1" stroke-dasharray="6 6" />
+<line x1="1270.0" y1="90" x2="1270.0" y2="2520" stroke="#cbd5e1" stroke-dasharray="6 6" />
+<rect x="40" y="166.0" width="1440" height="36" rx="8" fill="#ecfeff" stroke="#06b6d4" />
+<text x="760.0" y="188.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="15" font-weight="700" fill="#155e75" text-anchor="middle"><tspan x="760.0" dy="0">阶段 1：发送端 DSP 通过三线握手和 SPI block 上传整段 AMR</tspan></text>
+<rect x="-25.0" y="214.0" width="210" height="48" rx="6" fill="#fff7ed" stroke="#fb923c" />
+<text x="80.0" y="234.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="12" font-weight="400" fill="#7c2d12" text-anchor="middle"><tspan x="80.0" dy="0">APP_STATE_ENCODE：录音完成后整段</tspan><tspan x="80.0" dy="16">AMR 编码</tspan></text>
+<line x1="106.0" y1="323.0" x2="292.0" y2="323.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="199.0" y="311.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="199.0" dy="0">DSP_REQ = 1， 请求一次 SPI transaction</tspan></text>
+<line x1="292.0" y1="397.0" x2="106.0" y2="397.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="199.0" y="385.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="199.0" dy="0">SPI_READY = 1， Art-Pi slave DMA 已 arm</tspan></text>
+<line x1="106.0" y1="471.0" x2="292.0" y2="471.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="199.0" y="459.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="199.0" dy="0">DSP_UPLOAD_BLOCK：session、block_id、block_count、payload_bytes、AMR</tspan><tspan x="199.0" dy="17">payload</tspan></text>
+<rect x="213.0" y="521.0" width="210" height="102" rx="6" fill="#fff7ed" stroke="#fb923c" />
+<text x="318.0" y="541.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="12" font-weight="400" fill="#7c2d12" text-anchor="middle"><tspan x="318.0" dy="0">解包 16-bit word payload，</tspan><tspan x="318.0" dy="16">追加到</tspan><tspan x="318.0" dy="16">ptt_uplink_amr_buffer，</tspan><tspan x="318.0" dy="16">并保存 last_ack</tspan></text>
+<line x1="292.0" y1="630.0" x2="106.0" y2="630.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="199.0" y="618.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="199.0" dy="0">SPI_READY = 0， 本次 SPI transaction 完成</tspan></text>
+<line x1="106.0" y1="704.0" x2="292.0" y2="704.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="199.0" y="692.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="199.0" dy="0">DSP_STATUS_POLL：读取上一块 upload block 的延迟 ACK</tspan></text>
+<line x1="292.0" y1="778.0" x2="106.0" y2="778.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="199.0" y="766.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="199.0" dy="0">ARTPI_STATUS：ack_block_id、status_code</tspan></text>
+<rect x="213.0" y="828.0" width="210" height="48" rx="6" fill="#fff7ed" stroke="#fb923c" />
+<text x="318.0" y="848.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="12" font-weight="400" fill="#7c2d12" text-anchor="middle"><tspan x="318.0" dy="0">最后一块 ACK 被 DSP 取走后，</tspan><tspan x="318.0" dy="16">唤醒 UDP TX 线程发送整段 AMR</tspan></text>
+<rect x="40" y="911.0" width="1440" height="36" rx="8" fill="#ecfeff" stroke="#06b6d4" />
+<text x="760.0" y="933.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="15" font-weight="700" fill="#155e75" text-anchor="middle"><tspan x="760.0" dy="0">阶段 2：本地 Art-Pi 到对端 Art-Pi 的 UDP session 停等传输</tspan></text>
+<line x1="344.0" y1="983.0" x2="530.0" y2="983.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="437.0" y="971.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="437.0" dy="0">ptt_udp_request_uplink_tx：提交完整 uplink AMR session</tspan></text>
+<rect x="451.0" y="1033.0" width="210" height="84" rx="6" fill="#fff7ed" stroke="#fb923c" />
+<text x="556.0" y="1053.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="12" font-weight="400" fill="#7c2d12" text-anchor="middle"><tspan x="556.0" dy="0">UDP TX 线程按 chunk 发送；</tspan><tspan x="556.0" dy="16">每个 chunk 等 ACK，</tspan><tspan x="556.0" dy="16">超时最多重传 3 次</tspan></text>
+<line x1="582.0" y1="1142.0" x2="768.0" y2="1142.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="675.0" y="1130.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="675.0" dy="0">SESSION_DATA chunk</tspan><tspan x="675.0" dy="17">0：magic、version、session_id、chunk_id、total_bytes、payload</tspan></text>
+<line x1="768.0" y1="1216.0" x2="582.0" y2="1216.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="675.0" y="1204.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="675.0" dy="0">SESSION_ACK chunk 0：status OK</tspan></text>
+<line x1="582.0" y1="1290.0" x2="768.0" y2="1290.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="675.0" y="1278.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="675.0" dy="0">SESSION_DATA chunk N：重复直到整段 AMR 发送完成</tspan></text>
+<line x1="768.0" y1="1364.0" x2="582.0" y2="1364.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="675.0" y="1352.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="675.0" dy="0">SESSION_ACK chunk N：status OK</tspan></text>
+<rect x="689.0" y="1414.0" width="210" height="84" rx="6" fill="#fff7ed" stroke="#fb923c" />
+<text x="794.0" y="1434.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="12" font-weight="400" fill="#7c2d12" text-anchor="middle"><tspan x="794.0" dy="0">按顺序缓存到</tspan><tspan x="794.0" dy="16">ptt_downlink_amr_buffer，</tspan><tspan x="794.0" dy="16">收齐后检查 AMR 头 #!AMR</tspan></text>
+<line x1="820.0" y1="1523.0" x2="1006.0" y2="1523.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="913.0" y="1511.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="913.0" dy="0">设置 PTT_STATE_DOWNLINK_READY_FOR_DSP</tspan></text>
+<line x1="1058.0" y1="1597.0" x2="1244.0" y2="1597.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="1151.0" y="1585.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="1151.0" dy="0">DATA_READY = 1， 通知 DSP 有完整 session 可下载</tspan></text>
+<rect x="40" y="1645.0" width="1440" height="36" rx="8" fill="#ecfeff" stroke="#06b6d4" />
+<text x="760.0" y="1667.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="15" font-weight="700" fill="#155e75" text-anchor="middle"><tspan x="760.0" dy="0">阶段 3：接收端 DSP 空闲时主动 SPI 下载、解码并播放</tspan></text>
+<rect x="1165.0" y="1693.0" width="210" height="84" rx="6" fill="#fff7ed" stroke="#fb923c" />
+<text x="1270.0" y="1713.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="12" font-weight="400" fill="#7c2d12" text-anchor="middle"><tspan x="1270.0" dy="0">APP_STATE_IDLE 轮询</tspan><tspan x="1270.0" dy="16">DATA_READY， 高电平后进入</tspan><tspan x="1270.0" dy="16">APP_STATE_PTT_DOWNLOAD</tspan></text>
+<line x1="1244.0" y1="1802.0" x2="1058.0" y2="1802.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="1151.0" y="1790.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="1151.0" dy="0">DSP_REQ = 1， 请求下载下一块下行 AMR</tspan></text>
+<line x1="1058.0" y1="1876.0" x2="1244.0" y2="1876.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="1151.0" y="1864.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="1151.0" dy="0">SPI_READY = 1， 预装 ARTPI_DOWNLOAD_BLOCK；</tspan><tspan x="1151.0" dy="17">无数据则预装 ARTPI_NO_SESSION</tspan></text>
+<line x1="1244.0" y1="1950.0" x2="1058.0" y2="1950.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="1151.0" y="1938.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="1151.0" dy="0">DSP_DOWNLOAD_REQ：session、block_id</tspan></text>
+<line x1="1058.0" y1="2024.0" x2="1244.0" y2="2024.0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+<text x="1151.0" y="2012.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="13" font-weight="400" fill="#0f172a" text-anchor="middle"><tspan x="1151.0" dy="0">ARTPI_DOWNLOAD_BLOCK：block_id、block_count、payload_bytes、AMR</tspan><tspan x="1151.0" dy="17">payload</tspan></text>
+<rect x="927.0" y="2074.0" width="210" height="84" rx="6" fill="#fff7ed" stroke="#fb923c" />
+<text x="1032.0" y="2094.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="12" font-weight="400" fill="#7c2d12" text-anchor="middle"><tspan x="1032.0" dy="0">SPI 完成后推进下载游标；</tspan><tspan x="1032.0" dy="16">最后一块被取走后 DATA_READY</tspan><tspan x="1032.0" dy="16">= 0， 状态回 IDLE</tspan></text>
+<rect x="1165.0" y="2159.0" width="210" height="84" rx="6" fill="#fff7ed" stroke="#fb923c" />
+<text x="1270.0" y="2179.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="12" font-weight="400" fill="#7c2d12" text-anchor="middle"><tspan x="1270.0" dy="0">解包 payload 到</tspan><tspan x="1270.0" dy="16">spi_receive_buffer[1...]，</tspan><tspan x="1270.0" dy="16">收齐后设置 received_amr_len</tspan></text>
+<rect x="1165.0" y="2244.0" width="210" height="48" rx="6" fill="#fff7ed" stroke="#fb923c" />
+<text x="1270.0" y="2264.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="12" font-weight="400" fill="#7c2d12" text-anchor="middle"><tspan x="1270.0" dy="0">codec_service_decode_received：逐帧</tspan><tspan x="1270.0" dy="16">AMR 解码到 PCM16 play_buf</tspan></text>
+<rect x="1165.0" y="2329.0" width="210" height="48" rx="6" fill="#fff7ed" stroke="#fb923c" />
+<text x="1270.0" y="2349.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="12" font-weight="400" fill="#7c2d12" text-anchor="middle"><tspan x="1270.0" dy="0">codec_service_get_play_sample：直接取</tspan><tspan x="1270.0" dy="16">PCM16 sample 播放</tspan></text>
+<text x="760.0" y="2536.0" font-family="Microsoft YaHei, SimSun, Arial, sans-serif" font-size="12" font-weight="400" fill="#64748b" text-anchor="middle"><tspan x="760.0" dy="0">由 tools/generate_ptt_sequence_diagram.py 生成</tspan></text></svg>
