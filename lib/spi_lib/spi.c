@@ -123,7 +123,6 @@ void spi_send_bulk(Uint16* buffer, Uint16 *receive_buffer, Uint16 length)
         recv_count++;
         if(recv_count >= length){
             recv_count = 0;
-            printf("codec.c 1102 recv_count >= length");
         }
     }
 

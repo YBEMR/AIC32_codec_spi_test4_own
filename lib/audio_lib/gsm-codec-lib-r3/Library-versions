@@ -1,8 +1,0 @@
-All Themyscira GSM codec libraries (currently libgsmefr, libgsmfr2 and libtwamr)
-use Semantic Versioning, as described at <https://semver.org/>.  In the present
-source release package, the semantic versions of the included libraries are as
-follows:
-
-libgsmefr version 1.1.0
-libgsmfr2 version 2.0.0
-libtwamr  version 1.0.0

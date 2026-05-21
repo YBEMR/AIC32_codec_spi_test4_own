@@ -64,7 +64,7 @@ AMR_ENCODE_MODE ?= MR515
 SPEED_COMMON_FLAGS := $(filter-out -g,$(COMMON_FLAGS))
 OPT_SPEED_FLAGS := --opt_level=3 --opt_for_speed=5
 
-AUDIO_FLAGS := $(SPEED_COMMON_FLAGS) $(OPT_SPEED_FLAGS) --define=AMR_FAST_BASIC_OPS=1 --define=AMR_ENCODE_MODE=$(AMR_ENCODE_MODE) $(AUDIO_DEBUG_FLAGS)
+AUDIO_FLAGS := $(SPEED_COMMON_FLAGS) $(OPT_SPEED_FLAGS) $(AUDIO_DEBUG_FLAGS)
 CODEC_SERVICE_FLAGS := $(SPEED_COMMON_FLAGS) $(OPT_SPEED_FLAGS) $(CODEC_SERVICE_DEBUG_FLAGS)
 SPI_FLAGS := $(COMMON_FLAGS)
 UARTA_FLAGS := $(COMMON_FLAGS)
@@ -80,8 +80,6 @@ BASE_INCLUDES += --include_path="$(DSP_HEADERS_INC)"
 
 AUDIO_INCLUDES := $(BASE_INCLUDES)
 AUDIO_INCLUDES += --include_path="audio_lib"
-AUDIO_INCLUDES += --include_path="audio_lib/gsm-codec-lib-r3/libtest"
-AUDIO_INCLUDES += --include_path="audio_lib/gsm-codec-lib-r3/libtwamr"
 
 SPI_INCLUDES := $(BASE_INCLUDES) --include_path="spi_lib"
 UARTA_INCLUDES := $(BASE_INCLUDES) --include_path="uarta_lib"
@@ -92,25 +90,14 @@ KEY_INCLUDES := $(BASE_INCLUDES) --include_path="key_lib"
 CODEC_SERVICE_INCLUDES := $(BASE_INCLUDES)
 CODEC_SERVICE_INCLUDES += --include_path="codec_service_lib"
 CODEC_SERVICE_INCLUDES += --include_path="audio_lib"
-CODEC_SERVICE_INCLUDES += --include_path="audio_lib/gsm-codec-lib-r3/libtest"
-CODEC_SERVICE_INCLUDES += --include_path="audio_lib/gsm-codec-lib-r3/libtwamr"
 CODEC_SERVICE_INCLUDES += --include_path="spi_lib"
 
 AUDIO_ROOT_SRCS := audio_lib/audio.c audio_lib/g711_codec.c
-AUDIO_LIBTEST_SRCS := $(wildcard audio_lib/gsm-codec-lib-r3/libtest/*.c)
-AUDIO_LIBTWAMR_SRCS := $(wildcard audio_lib/gsm-codec-lib-r3/libtwamr/*.c)
-AUDIO_SRCS := $(AUDIO_ROOT_SRCS) $(AUDIO_LIBTEST_SRCS) $(AUDIO_LIBTWAMR_SRCS)
+AUDIO_SRCS := $(AUDIO_ROOT_SRCS)
 AUDIO_HDRS := audio_lib/audio.h audio_lib/g711_codec.h
-AUDIO_HDRS += $(wildcard audio_lib/gsm-codec-lib-r3/libtest/*.h)
-AUDIO_HDRS += $(wildcard audio_lib/gsm-codec-lib-r3/libtwamr/*.h)
 
 AUDIO_OBJS := $(patsubst audio_lib/%.c,$(BUILD_DIR)/audio_lib/%.obj,$(AUDIO_SRCS))
 AUDIO_ROOT_OBJS := $(patsubst audio_lib/%.c,$(BUILD_DIR)/audio_lib/%.obj,$(AUDIO_ROOT_SRCS))
-AUDIO_LIBTEST_OBJS := $(patsubst audio_lib/%.c,$(BUILD_DIR)/audio_lib/%.obj,$(AUDIO_LIBTEST_SRCS))
-AUDIO_LIBTWAMR_OBJS := $(patsubst audio_lib/%.c,$(BUILD_DIR)/audio_lib/%.obj,$(AUDIO_LIBTWAMR_SRCS))
-AUDIO_LIBTWAMR_OBJS_1 := $(wordlist 1,45,$(AUDIO_LIBTWAMR_OBJS))
-AUDIO_LIBTWAMR_OBJS_2 := $(wordlist 46,90,$(AUDIO_LIBTWAMR_OBJS))
-AUDIO_LIBTWAMR_OBJS_3 := $(wordlist 91,200,$(AUDIO_LIBTWAMR_OBJS))
 
 SPI_SRCS := spi_lib/spi.c
 UARTA_SRCS := uarta_lib/uart.c
@@ -185,12 +172,7 @@ $(AUDIO_LIB_OUT): $(AUDIO_OBJS)
 	@$(call make-dir,$(@D))
 	@$(call remove-file,$@)
 	@echo Building library: "$@"
-	@echo r $(call winpath,$@)> "$(call winpath,$(AUDIO_AR_CMD))"
-	@echo $(AUDIO_ROOT_OBJS) $(AUDIO_LIBTEST_OBJS)>> "$(call winpath,$(AUDIO_AR_CMD))"
-	@echo $(AUDIO_LIBTWAMR_OBJS_1)>> "$(call winpath,$(AUDIO_AR_CMD))"
-	@echo $(AUDIO_LIBTWAMR_OBJS_2)>> "$(call winpath,$(AUDIO_AR_CMD))"
-	@echo $(AUDIO_LIBTWAMR_OBJS_3)>> "$(call winpath,$(AUDIO_AR_CMD))"
-	"$(AR2000)" @"$(call winpath,$(AUDIO_AR_CMD))"
+	"$(AR2000)" r "$@" $(AUDIO_OBJS)
 	@echo Finished building: "$@"
 	@echo.
 
