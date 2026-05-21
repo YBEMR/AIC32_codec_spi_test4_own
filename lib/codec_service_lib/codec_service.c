@@ -5,17 +5,57 @@
 
 #pragma DATA_SECTION(pcm_buffer, "ZONE7DATA");
 static int16_t pcm_buffer[CODEC_SERVICE_MAX_RECORD_CNT];
-
 #pragma DATA_SECTION(g711_output_buffer, "ZONE7DATA");
 static uint8_t g711_output_buffer[CODEC_SERVICE_G711_BUF_SIZE];
-
 #pragma DATA_SECTION(spi_receive_buffer, "ZONE7DATA");
 static uint8_t spi_receive_buffer[CODEC_SERVICE_G711_BUF_SIZE];
+
+
 static Uint32 record_count = 0;
 static Uint16 g711_len = 0;
 static Uint16 received_g711_len = 0;
 static Uint32 pcm_sample_count = 0;
 static Uint32 play_sample_index = 0;
+
+static int16 stream_capture_frame[CODEC_SERVICE_STREAM_FRAME_SAMPLES];
+static Uint16 stream_capture_index = 0;
+static Uint16 stream_capture_active = 0;
+
+static Uint16 stream_encoded_frames[CODEC_SERVICE_STREAM_ENCODED_FRAME_CAPACITY]
+                                  [CODEC_SERVICE_STREAM_FRAME_OCTETS];
+static Uint16 stream_encoded_read_index = 0;
+static Uint16 stream_encoded_write_index = 0;
+static Uint16 stream_encoded_frame_count = 0;
+
+static int16 stream_play_frames[CODEC_SERVICE_STREAM_PLAY_FRAME_CAPACITY]
+                               [CODEC_SERVICE_STREAM_FRAME_SAMPLES];
+static Uint16 stream_play_read_index = 0;
+static Uint16 stream_play_write_index = 0;
+static Uint16 stream_play_frame_count = 0;
+static Uint16 stream_play_sample_index = 0;
+
+static Uint32 stream_overflow_count = 0;
+static Uint32 stream_underflow_count = 0;
+
+static Uint16 codec_service_stream_next_encoded_index(Uint16 index)
+{
+    index++;
+    if (index >= CODEC_SERVICE_STREAM_ENCODED_FRAME_CAPACITY) {
+        index = 0;
+    }
+
+    return index;
+}
+
+static Uint16 codec_service_stream_next_play_index(Uint16 index)
+{
+    index++;
+    if (index >= CODEC_SERVICE_STREAM_PLAY_FRAME_CAPACITY) {
+        index = 0;
+    }
+
+    return index;
+}
 
 void codec_service_reset(void)
 {
@@ -173,4 +213,175 @@ const uint8_t *codec_service_get_spi_rx_buffer(void)
 const int16_t *codec_service_get_pcm_buffer(void)
 {
     return pcm_buffer;
+}
+
+void codec_service_stream_reset(void)
+{
+    stream_capture_index = 0;
+    stream_capture_active = 0;
+
+    stream_encoded_read_index = 0;
+    stream_encoded_write_index = 0;
+    stream_encoded_frame_count = 0;
+
+    stream_play_read_index = 0;
+    stream_play_write_index = 0;
+    stream_play_frame_count = 0;
+    stream_play_sample_index = 0;
+
+    stream_overflow_count = 0;
+    stream_underflow_count = 0;
+}
+
+void codec_service_stream_start_capture(void)
+{
+    stream_capture_index = 0;
+    stream_capture_active = 1;
+}
+
+void codec_service_stream_stop_capture(void)
+{
+    stream_capture_active = 0;
+    stream_capture_index = 0;
+}
+
+int16_t codec_service_stream_record_sample(int16_t sample)
+{
+    if (stream_capture_active == 0U) {
+        return CODEC_SERVICE_ERR_NO_RECORD;
+    }
+
+    stream_capture_frame[stream_capture_index++] = (int16)sample;
+
+    if (stream_capture_index < CODEC_SERVICE_STREAM_FRAME_SAMPLES) {
+        return CODEC_SERVICE_OK;
+    }
+
+    stream_capture_index = 0;
+
+    if (stream_encoded_frame_count >=
+            CODEC_SERVICE_STREAM_ENCODED_FRAME_CAPACITY) {
+        stream_overflow_count++;
+        return CODEC_SERVICE_ERR_OVERFLOW;
+    }
+
+    G711A_EncodeFrame(stream_capture_frame,
+                      stream_encoded_frames[stream_encoded_write_index],
+                      CODEC_SERVICE_STREAM_FRAME_SAMPLES);
+
+    stream_encoded_write_index =
+            codec_service_stream_next_encoded_index(stream_encoded_write_index);
+    stream_encoded_frame_count++;
+
+    return CODEC_SERVICE_OK;
+}
+
+Uint16 codec_service_stream_has_encoded_frame(void)
+{
+    return (stream_encoded_frame_count > 0U) ? 1U : 0U;
+}
+
+int16_t codec_service_stream_get_encoded_frame(Uint16 *frame_words,
+                                               Uint16 max_words,
+                                               Uint16 *out_words)
+{
+    Uint16 i;
+
+    if ((frame_words == 0) || (out_words == 0)) {
+        return CODEC_SERVICE_ERR_PARAM;
+    }
+
+    if (max_words < CODEC_SERVICE_STREAM_FRAME_OCTETS) {
+        return CODEC_SERVICE_ERR_LENGTH;
+    }
+
+    if (stream_encoded_frame_count == 0U) {
+        *out_words = 0;
+        stream_underflow_count++;
+        return CODEC_SERVICE_ERR_UNDERFLOW;
+    }
+
+    for (i = 0U; i < CODEC_SERVICE_STREAM_FRAME_OCTETS; i++) {
+        frame_words[i] =
+                stream_encoded_frames[stream_encoded_read_index][i] &
+                G711_OCTET_MASK;
+    }
+
+    *out_words = CODEC_SERVICE_STREAM_FRAME_OCTETS;
+    stream_encoded_read_index =
+            codec_service_stream_next_encoded_index(stream_encoded_read_index);
+    stream_encoded_frame_count--;
+
+    return CODEC_SERVICE_OK;
+}
+
+int16_t codec_service_stream_put_play_frame(const Uint16 *g711_words,
+                                            Uint16 octets)
+{
+    if (g711_words == 0) {
+        return CODEC_SERVICE_ERR_PARAM;
+    }
+
+    if (octets != CODEC_SERVICE_STREAM_FRAME_OCTETS) {
+        return CODEC_SERVICE_ERR_LENGTH;
+    }
+
+    if (stream_play_frame_count >= CODEC_SERVICE_STREAM_PLAY_FRAME_CAPACITY) {
+        stream_overflow_count++;
+        return CODEC_SERVICE_ERR_OVERFLOW;
+    }
+
+    G711A_DecodeFrame(g711_words,
+                      stream_play_frames[stream_play_write_index],
+                      CODEC_SERVICE_STREAM_FRAME_OCTETS);
+
+    stream_play_write_index =
+            codec_service_stream_next_play_index(stream_play_write_index);
+    stream_play_frame_count++;
+
+    return CODEC_SERVICE_OK;
+}
+
+int16_t codec_service_stream_get_play_sample(Uint16 *sample)
+{
+    if (sample == 0) {
+        return CODEC_SERVICE_ERR_PARAM;
+    }
+
+    if (stream_play_frame_count == 0U) {
+        stream_underflow_count++;
+        return CODEC_SERVICE_PLAY_DONE;
+    }
+
+    *sample = (Uint16)stream_play_frames[stream_play_read_index]
+                                     [stream_play_sample_index++];
+
+    if (stream_play_sample_index >= CODEC_SERVICE_STREAM_FRAME_SAMPLES) {
+        stream_play_sample_index = 0;
+        stream_play_read_index =
+                codec_service_stream_next_play_index(stream_play_read_index);
+        stream_play_frame_count--;
+    }
+
+    return CODEC_SERVICE_OK;
+}
+
+Uint32 codec_service_stream_get_encoded_frame_count(void)
+{
+    return (Uint32)stream_encoded_frame_count;
+}
+
+Uint32 codec_service_stream_get_play_frame_count(void)
+{
+    return (Uint32)stream_play_frame_count;
+}
+
+Uint32 codec_service_stream_get_overflow_count(void)
+{
+    return stream_overflow_count;
+}
+
+Uint32 codec_service_stream_get_underflow_count(void)
+{
+    return stream_underflow_count;
 }
