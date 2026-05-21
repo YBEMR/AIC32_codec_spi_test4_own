@@ -1,11 +1,11 @@
 # codec_service_lib README
 
 ## 1. 库简介
-`codec_service_lib` 是面向教学流程的服务层库，封装了“录音缓存管理 -> AMR 编码 -> SPI 两次交换 -> AMR 解码 -> 播放采样输出”的可复用步骤。  
+`codec_service_lib` 是面向教学流程的服务层库，封装了“录音缓存管理 -> G711 编码 -> SPI 两次交换 -> G711 解码 -> 播放采样输出”的可复用步骤。  
 该库不包含 ISR 入口和 `main`，推荐由 `student_codec_app.c` 在主循环/状态机中调度。
 
 依赖：
-- `audio_lib`（AMR 编解码与格式处理）
+- `audio_lib`（G711 编解码与音频接口）
 - `spi_lib`（SPI 收发）
 - `DSP2833x_Device.h`、`DSP2833x_Examples.h`
 
@@ -100,7 +100,7 @@ void poll_record_count(void)
 ```
 
 ### 4.5 `int16_t codec_service_encode_recorded(void);`
-- 作用：将当前录音数据编码为 AMR。
+- 作用：将当前录音数据编码为 G711 A-law。
 - 参数：无。
 - 返回值：状态码；成功返回 `CODEC_SERVICE_OK`，失败返回负值错误码。
 - 调用时机：录音结束后调用；不在 ISR 中调用。
@@ -145,7 +145,7 @@ int16_t do_spi_round2(void)
 ```
 
 ### 4.8 `int16_t codec_service_decode_received(void);`
-- 作用：将 SPI 接收到的 AMR 数据解码为可直接播放的 PCM16 样本。
+- 作用：将 SPI 接收到的 G711 数据解码为可直接播放的 PCM16 样本。
 - 参数：无。
 - 返回值：状态码；成功 `CODEC_SERVICE_OK`，失败负值。
 - 调用时机：SPI 两阶段交换完成后调用；不在 ISR 中调用。
@@ -182,26 +182,26 @@ interrupt void mcbsp_tx_isr(void)
 }
 ```
 
-### 4.10 `Uint16 codec_service_get_amr_len(void);`
-- 作用：获取本端编码后的 AMR 长度。
+### 4.10 `Uint16 codec_service_get_g711_len(void);`
+- 作用：获取本端编码后的 G711 长度。
 - 参数：无。
-- 返回值：AMR 数据长度（单位：字节）。
+- 返回值：G711 数据长度（单位：字节）。
 - 调用时机：编码后用于日志或发包长度确认。
 - 最小示例：
 ```c
 #include "codec_service.h"
 
-Uint16 amr_len;
-void log_amr_len(void)
+Uint16 g711_len;
+void log_g711_len(void)
 {
-    amr_len = codec_service_get_amr_len();
+    g711_len = codec_service_get_g711_len();
 }
 ```
 
-### 4.11 `Uint16 codec_service_get_received_amr_len(void);`
-- 作用：获取 SPI 接收后的 AMR 长度。
+### 4.11 `Uint16 codec_service_get_received_g711_len(void);`
+- 作用：获取 SPI 接收后的 G711 长度。
 - 参数：无。
-- 返回值：接收 AMR 长度（单位：字节）。
+- 返回值：接收 G711 长度（单位：字节）。
 - 调用时机：SPI 收发后、解码前用于长度校验。
 - 最小示例：
 ```c
@@ -210,7 +210,7 @@ void log_amr_len(void)
 Uint16 rx_len;
 void check_rx_len(void)
 {
-    rx_len = codec_service_get_received_amr_len();
+    rx_len = codec_service_get_received_g711_len();
 }
 ```
 
@@ -246,19 +246,19 @@ void poll_play_index(void)
 }
 ```
 
-### 4.14 `const uint8_t *codec_service_get_amr_buffer(void);`
-- 作用：获取内部 AMR 编码缓冲区只读指针。
+### 4.14 `const uint8_t *codec_service_get_g711_buffer(void);`
+- 作用：获取内部 G711 编码缓冲区只读指针。
 - 参数：无。
-- 返回值：AMR 缓冲区首地址（只读）。
+- 返回值：G711 缓冲区首地址（只读）。
 - 调用时机：编码后用于调试或额外传输流程。
 - 最小示例：
 ```c
 #include "codec_service.h"
 
-const uint8_t *amr_ptr;
-void fetch_amr_ptr(void)
+const uint8_t *g711_ptr;
+void fetch_g711_ptr(void)
 {
-    amr_ptr = codec_service_get_amr_buffer();
+    g711_ptr = codec_service_get_g711_buffer();
 }
 ```
 

@@ -16,7 +16,7 @@ typedef enum {
     APP_STATE_IDLE = 0,
     APP_STATE_RECORD,
     APP_STATE_ENCODE,
-    APP_STATE_AMR_READY,
+    APP_STATE_G711_READY,
     APP_STATE_RECEIVE_READY,
     APP_STATE_DECODE,
     APP_STATE_PLAY
@@ -34,13 +34,6 @@ static volatile Uint16 play_sample_hold = 0;
 
 #define KEY_DEBOUNCE_MS 260U
 #define APP_MONO_RECORD_WORD_SELECT 0U
-
-extern Uint16 AmrFastLoadStart;
-extern Uint16 AmrFastLoadEnd;
-extern Uint16 AmrFastRunStart;
-extern Uint16 AmrFast2LoadStart;
-extern Uint16 AmrFast2LoadEnd;
-extern Uint16 AmrFast2RunStart;
 
 static void init_zone7(void);
 static Uint32 app_get_tick_count(void);
@@ -97,8 +90,6 @@ int16_t main(int16_t argc, char **argv)
     ERTM;
 
     init_zone7();
-    MemCopy(&AmrFastLoadStart, &AmrFastLoadEnd, &AmrFastRunStart);
-    MemCopy(&AmrFast2LoadStart, &AmrFast2LoadEnd, &AmrFast2RunStart);
     audio_set_tick_getter(app_get_tick_count);
     codec_service_reset();
 
@@ -120,13 +111,13 @@ int16_t main(int16_t argc, char **argv)
             encode_elapsed_ms = (tick_count - encode_start_tick) * 10UL;
             UARTa_SendStringAndNumber("Encode time(ms): ", encode_elapsed_ms, "\r\n");
             if (result == CODEC_SERVICE_OK) {
-                UARTa_SendStringAndNumber("Encoding successful, AMR length: ", codec_service_get_amr_len(), "\r\n");
-                current_state = APP_STATE_AMR_READY;
+                UARTa_SendStringAndNumber("Encoding successful, G711 length: ", codec_service_get_g711_len(), "\r\n");
+                current_state = APP_STATE_G711_READY;
             } else {
                 UARTa_SendStringAndNumber("Encoding failed: ", result, "\r\n");
                 current_state = APP_STATE_IDLE;
             }
-        } else if (current_state == APP_STATE_AMR_READY) {
+        } else if (current_state == APP_STATE_G711_READY) {
             // 防止被误触发进入下一步，导致状态机混乱
             spi_ready_flag = 0;
             UARTa_SendString("### Starting SPI exchange one ###\r\n");
@@ -151,15 +142,15 @@ int16_t main(int16_t argc, char **argv)
             // STEP 3
             result = codec_service_spi_exchange_second();
             if (result == CODEC_SERVICE_OK) {
-                UARTa_SendStringAndNumber("SPI exchange two successful, AMR length: ", codec_service_get_received_amr_len(), "\r\n");
+                UARTa_SendStringAndNumber("SPI exchange two successful, G711 length: ", codec_service_get_received_g711_len(), "\r\n");
                 current_state = APP_STATE_DECODE;
             } else {
                 const Uint16 *spi_rx_words = (const Uint16 *)codec_service_get_spi_rx_buffer();
                 Uint16 debug_i;
 
                 UARTa_SendStringAndNumber("SPI exchange two failed: ", result, "\r\n");
-                UARTa_SendStringAndNumber("DSP expected AMR length: ", codec_service_get_amr_len(), "\r\n");
-                UARTa_SendStringAndNumber("DSP parsed RX length: ", codec_service_get_received_amr_len(), "\r\n");
+                UARTa_SendStringAndNumber("DSP expected G711 length: ", codec_service_get_g711_len(), "\r\n");
+                UARTa_SendStringAndNumber("DSP parsed RX length: ", codec_service_get_received_g711_len(), "\r\n");
                 UARTa_SendStringAndHex("DSP raw rx[0]: 0x", spi_rx_words[0], "\r\n");
                 UARTa_SendString("DSP raw rx[0..7]: ");
                 for (debug_i = 0; debug_i < 8U; debug_i++) {
