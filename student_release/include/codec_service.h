@@ -7,7 +7,6 @@
 
 #define CODEC_SERVICE_MAX_RECORD_CNT   40000UL
 #define CODEC_SERVICE_AMR_BUF_SIZE     (CODEC_SERVICE_MAX_RECORD_CNT + 1UL)
-#define CODEC_SERVICE_WAV_BUF_SIZE     (44UL + (CODEC_SERVICE_MAX_RECORD_CNT * 2UL))
 #define CODEC_SERVICE_SPI_PACKET_SIZE  CODEC_SERVICE_AMR_BUF_SIZE
 
 #define CODEC_SERVICE_OK                 0
@@ -34,11 +33,11 @@ int16_t codec_service_get_play_sample(Uint16 *sample);
 
 Uint16 codec_service_get_amr_len(void);
 Uint16 codec_service_get_received_amr_len(void);
-Uint32 codec_service_get_wav_len(void);
-Uint32 codec_service_get_play_offset(void);
+Uint32 codec_service_get_pcm_sample_count(void);
+Uint32 codec_service_get_play_sample_index(void);
 
 const uint8_t *codec_service_get_amr_buffer(void);
 const uint8_t *codec_service_get_spi_rx_buffer(void);
-const uint8_t *codec_service_get_wav_buffer(void);
+const int16_t *codec_service_get_pcm_buffer(void);
 
 #endif /* CODEC_SERVICE_H_ */

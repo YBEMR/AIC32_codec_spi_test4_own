@@ -145,7 +145,7 @@ int16_t do_spi_round2(void)
 ```
 
 ### 4.8 `int16_t codec_service_decode_received(void);`
-- 作用：将 SPI 接收到的 AMR 数据解码为可播放 WAV/PCM 数据。
+- 作用：将 SPI 接收到的 AMR 数据解码为可直接播放的 PCM16 样本。
 - 参数：无。
 - 返回值：状态码；成功 `CODEC_SERVICE_OK`，失败负值。
 - 调用时机：SPI 两阶段交换完成后调用；不在 ISR 中调用。
@@ -214,35 +214,35 @@ void check_rx_len(void)
 }
 ```
 
-### 4.12 `Uint16 codec_service_get_wav_len(void);`
-- 作用：获取解码输出的 WAV/PCM 数据长度。
+### 4.12 `Uint32 codec_service_get_pcm_sample_count(void);`
+- 作用：获取解码输出的 PCM 样本数。
 - 参数：无。
-- 返回值：输出长度（单位：字节）。
+- 返回值：输出长度（单位：16-bit PCM 样本）。
 - 调用时机：解码成功后用于播放范围控制。
 - 最小示例：
 ```c
 #include "codec_service.h"
 
-Uint16 wav_len;
-void log_wav_len(void)
+Uint32 pcm_samples;
+void log_pcm_samples(void)
 {
-    wav_len = codec_service_get_wav_len();
+    pcm_samples = codec_service_get_pcm_sample_count();
 }
 ```
 
-### 4.13 `Uint16 codec_service_get_play_offset(void);`
-- 作用：获取当前播放偏移位置。
+### 4.13 `Uint32 codec_service_get_play_sample_index(void);`
+- 作用：获取当前播放样本索引。
 - 参数：无。
-- 返回值：播放偏移量（单位以实现为准，通常为样本索引或字节偏移）。
+- 返回值：播放索引（单位：16-bit PCM 样本）。
 - 调用时机：播放阶段状态观察。
 - 最小示例：
 ```c
 #include "codec_service.h"
 
-Uint16 offset;
-void poll_play_offset(void)
+Uint32 index;
+void poll_play_index(void)
 {
-    offset = codec_service_get_play_offset();
+    index = codec_service_get_play_sample_index();
 }
 ```
 
@@ -278,19 +278,19 @@ void fetch_rx_ptr(void)
 }
 ```
 
-### 4.16 `const uint8_t *codec_service_get_wav_buffer(void);`
-- 作用：获取内部解码后的 WAV/PCM 缓冲区只读指针。
+### 4.16 `const int16_t *codec_service_get_pcm_buffer(void);`
+- 作用：获取内部 PCM16 缓冲区只读指针。
 - 参数：无。
-- 返回值：WAV 缓冲区首地址（只读）。
+- 返回值：PCM16 缓冲区首地址（只读）。
 - 调用时机：解码后用于播放链路或调试。
 - 最小示例：
 ```c
 #include "codec_service.h"
 
-const uint8_t *wav_ptr;
-void fetch_wav_ptr(void)
+const int16_t *pcm_ptr;
+void fetch_pcm_ptr(void)
 {
-    wav_ptr = codec_service_get_wav_buffer();
+    pcm_ptr = codec_service_get_pcm_buffer();
 }
 ```
 

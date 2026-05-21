@@ -180,7 +180,7 @@ int16_t main(int16_t argc, char **argv)
             decode_elapsed_ms = (tick_count - decode_start_tick) * 10UL;
             UARTa_SendStringAndNumber("Decode time(ms): ", decode_elapsed_ms, "\r\n");
             if (result == CODEC_SERVICE_OK) {
-                UARTa_SendStringAndNumber("Decoding successful, WAV length: ", codec_service_get_wav_len(), "\r\n");
+                UARTa_SendStringAndNumber("Decoding successful, PCM samples: ", codec_service_get_pcm_sample_count(), "\r\n");
                 mcbsp_word_phase = 0;
                 play_sample_hold = 0;
                 current_state = APP_STATE_PLAY;

@@ -1,16 +1,10 @@
 #include "codec_service.h"
 
-#include "audio.h"
 #include "g711_codec.h"
 #include "spi.h"
 
-typedef union {
-    int16_t record_buf[CODEC_SERVICE_MAX_RECORD_CNT];
-    uint8_t wav_output_buffer[CODEC_SERVICE_WAV_BUF_SIZE];
-} codec_service_workbuf_t;
-
-#pragma DATA_SECTION(codec_workbuf, "ZONE7DATA");
-static codec_service_workbuf_t codec_workbuf;
+#pragma DATA_SECTION(pcm_buffer, "ZONE7DATA");
+static int16_t pcm_buffer[CODEC_SERVICE_MAX_RECORD_CNT];
 
 #pragma DATA_SECTION(amr_output_buffer, "ZONE7DATA");
 static uint8_t amr_output_buffer[CODEC_SERVICE_AMR_BUF_SIZE];
@@ -20,16 +14,16 @@ static uint8_t spi_receive_buffer[CODEC_SERVICE_AMR_BUF_SIZE];
 static Uint32 record_count = 0;
 static Uint16 amr_len = 0;
 static Uint16 received_amr_len = 0;
-static Uint32 wav_total_len = 0;
-static Uint32 play_offset = 44U;
+static Uint32 pcm_sample_count = 0;
+static Uint32 play_sample_index = 0;
 
 void codec_service_reset(void)
 {
     record_count = 0;
     amr_len = 0;
     received_amr_len = 0;
-    wav_total_len = 0;
-    play_offset = 44U;
+    pcm_sample_count = 0;
+    play_sample_index = 0;
 }
 
 void codec_service_start_record(void)
@@ -37,8 +31,8 @@ void codec_service_start_record(void)
     record_count = 0;
     amr_len = 0;
     received_amr_len = 0;
-    wav_total_len = 0;
-    play_offset = 44U;
+    pcm_sample_count = 0;
+    play_sample_index = 0;
 }
 
 int16_t codec_service_record_sample(int16_t sample)
@@ -47,7 +41,7 @@ int16_t codec_service_record_sample(int16_t sample)
         return CODEC_SERVICE_ERR_LENGTH;
     }
 
-    codec_workbuf.record_buf[record_count++] = sample;
+    pcm_buffer[record_count++] = sample;
     return CODEC_SERVICE_OK;
 }
 
@@ -75,7 +69,7 @@ int16_t codec_service_encode_recorded(void)
 
     for (i = 0U; i < record_count; i++) {
         amr_output_buffer[i + 1U] =
-                (uint8_t)(G711A_LinearToAlaw(codec_workbuf.record_buf[i]) & G711_OCTET_MASK);
+                (uint8_t)(G711A_LinearToAlaw(pcm_buffer[i]) & G711_OCTET_MASK);
     }
 
     return CODEC_SERVICE_OK;
@@ -115,44 +109,33 @@ int16_t codec_service_spi_exchange_second(void)
 int16_t codec_service_decode_received(void)
 {
     Uint32 i;
-    Uint32 data_length;
-    uint8_t *pcm_ptr;
-    int16_t pcm_sample;
 
     if (received_amr_len == 0) {
         return CODEC_SERVICE_ERR_NO_RECORD;
     }
 
-    data_length = (Uint32)received_amr_len * 2UL;
-    if ((received_amr_len > CODEC_SERVICE_MAX_RECORD_CNT) ||
-        ((data_length + 44UL) > CODEC_SERVICE_WAV_BUF_SIZE)) {
-        wav_total_len = 0;
+    if (received_amr_len > CODEC_SERVICE_MAX_RECORD_CNT) {
+        pcm_sample_count = 0;
+        play_sample_index = 0;
         return CODEC_SERVICE_ERR_DECODE;
     }
 
-    create_wav_header(codec_workbuf.wav_output_buffer, data_length);
-
-    pcm_ptr = &codec_workbuf.wav_output_buffer[44U];
     for (i = 0U; i < received_amr_len; i++) {
-        pcm_sample = G711A_AlawToLinear((Uint16)spi_receive_buffer[i + 1U]);
-        *pcm_ptr++ = (uint8_t)((Uint16)pcm_sample & 0x00FFU);
-        *pcm_ptr++ = (uint8_t)(((Uint16)pcm_sample >> 8U) & 0x00FFU);
+        pcm_buffer[i] = G711A_AlawToLinear((Uint16)spi_receive_buffer[i + 1U]);
     }
 
-    wav_total_len = data_length + 44UL;
-    play_offset = 44U;
+    pcm_sample_count = (Uint32)received_amr_len;
+    play_sample_index = 0;
     return CODEC_SERVICE_OK;
 }
 
 int16_t codec_service_get_play_sample(Uint16 *sample)
 {
-    if ((sample == 0) || (wav_total_len <= 44U) || (play_offset + 1U >= wav_total_len)) {
+    if ((sample == 0) || (play_sample_index >= pcm_sample_count)) {
         return CODEC_SERVICE_PLAY_DONE;
     }
 
-    *sample = (Uint16)codec_workbuf.wav_output_buffer[play_offset] |
-              ((Uint16)codec_workbuf.wav_output_buffer[play_offset + 1U] << 8);
-    play_offset += 2U;
+    *sample = (Uint16)pcm_buffer[play_sample_index++];
 
     return CODEC_SERVICE_OK;
 }
@@ -167,14 +150,14 @@ Uint16 codec_service_get_received_amr_len(void)
     return received_amr_len;
 }
 
-Uint32 codec_service_get_wav_len(void)
+Uint32 codec_service_get_pcm_sample_count(void)
 {
-    return wav_total_len;
+    return pcm_sample_count;
 }
 
-Uint32 codec_service_get_play_offset(void)
+Uint32 codec_service_get_play_sample_index(void)
 {
-    return play_offset;
+    return play_sample_index;
 }
 
 const uint8_t *codec_service_get_amr_buffer(void)
@@ -187,7 +170,7 @@ const uint8_t *codec_service_get_spi_rx_buffer(void)
     return spi_receive_buffer;
 }
 
-const uint8_t *codec_service_get_wav_buffer(void)
+const int16_t *codec_service_get_pcm_buffer(void)
 {
-    return codec_workbuf.wav_output_buffer;
+    return pcm_buffer;
 }

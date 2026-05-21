@@ -1,5 +1,4 @@
 #include "audio.h"
-#include <string.h>
 
 extern void UARTa_SendString(char *msg);
 extern void UARTa_SendStringAndNumber(char *msg1, int32 number, char *msg2);
@@ -8,47 +7,6 @@ extern void Delay(int16 time);
 void audio_set_tick_getter(audio_tick_getter_t getter)
 {
     (void)getter;
-}
-
-static void audio_write_le16(uint8_t *dst, Uint16 value)
-{
-    dst[0] = (uint8_t)(value & 0x00FFU);
-    dst[1] = (uint8_t)((value >> 8U) & 0x00FFU);
-}
-
-static void audio_write_le32(uint8_t *dst, uint32_t value)
-{
-    dst[0] = (uint8_t)(value & 0x000000FFUL);
-    dst[1] = (uint8_t)((value >> 8U) & 0x000000FFUL);
-    dst[2] = (uint8_t)((value >> 16U) & 0x000000FFUL);
-    dst[3] = (uint8_t)((value >> 24U) & 0x000000FFUL);
-}
-
-void create_wav_header(uint8_t *header, uint32_t data_size)
-{
-    const Uint32 sample_rate = 8000UL;
-    const Uint16 channels = 1U;
-    const Uint16 bits_per_sample = 16U;
-    const Uint16 block_align = (Uint16)(channels * (bits_per_sample / 8U));
-    const Uint32 byte_rate = sample_rate * block_align;
-
-    if (header == 0) {
-        return;
-    }
-
-    memcpy(&header[0], "RIFF", 4U);
-    audio_write_le32(&header[4], data_size + 36UL);
-    memcpy(&header[8], "WAVE", 4U);
-    memcpy(&header[12], "fmt ", 4U);
-    audio_write_le32(&header[16], 16UL);
-    audio_write_le16(&header[20], 1U);
-    audio_write_le16(&header[22], channels);
-    audio_write_le32(&header[24], sample_rate);
-    audio_write_le32(&header[28], byte_rate);
-    audio_write_le16(&header[32], block_align);
-    audio_write_le16(&header[34], bits_per_sample);
-    memcpy(&header[36], "data", 4U);
-    audio_write_le32(&header[40], data_size);
 }
 
 void I2CA_Init()
