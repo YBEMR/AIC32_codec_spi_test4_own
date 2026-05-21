@@ -101,4 +101,4 @@ student_release/lib
 预编译库面向 TMS320F28335、COFF ABI、TI C2000 编译器 `22.6.0.LTS`。不要和 EABI 或其他版本工具链混用。
 
 ## 6. 下载程序
-python .\read_data1.py -p COM26 -w .\build\debug\AIC32_codec_spi_test4_own.txt
+python .\read_data1.py -p COM16 -w .\build\debug\AIC32_codec_spi_test4_own.txt

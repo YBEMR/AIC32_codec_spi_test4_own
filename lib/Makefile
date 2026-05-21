@@ -96,11 +96,11 @@ CODEC_SERVICE_INCLUDES += --include_path="audio_lib/gsm-codec-lib-r3/libtest"
 CODEC_SERVICE_INCLUDES += --include_path="audio_lib/gsm-codec-lib-r3/libtwamr"
 CODEC_SERVICE_INCLUDES += --include_path="spi_lib"
 
-AUDIO_ROOT_SRCS := audio_lib/audio.c
+AUDIO_ROOT_SRCS := audio_lib/audio.c audio_lib/g711_codec.c
 AUDIO_LIBTEST_SRCS := $(wildcard audio_lib/gsm-codec-lib-r3/libtest/*.c)
 AUDIO_LIBTWAMR_SRCS := $(wildcard audio_lib/gsm-codec-lib-r3/libtwamr/*.c)
 AUDIO_SRCS := $(AUDIO_ROOT_SRCS) $(AUDIO_LIBTEST_SRCS) $(AUDIO_LIBTWAMR_SRCS)
-AUDIO_HDRS := audio_lib/audio.h
+AUDIO_HDRS := audio_lib/audio.h audio_lib/g711_codec.h
 AUDIO_HDRS += $(wildcard audio_lib/gsm-codec-lib-r3/libtest/*.h)
 AUDIO_HDRS += $(wildcard audio_lib/gsm-codec-lib-r3/libtwamr/*.h)
 
@@ -125,7 +125,7 @@ TIMER0_HDRS := timer0_lib/timer.h
 EXINT_HDRS := exint_lib/exint.h
 LED_HDRS := led_lib/leds.h
 KEY_HDRS := key_lib/key.h
-CODEC_SERVICE_HDRS := codec_service_lib/codec_service.h audio_lib/audio.h spi_lib/spi.h
+CODEC_SERVICE_HDRS := codec_service_lib/codec_service.h audio_lib/audio.h audio_lib/g711_codec.h spi_lib/spi.h
 
 SPI_OBJS := $(patsubst spi_lib/%.c,$(BUILD_DIR)/spi_lib/%.obj,$(SPI_SRCS))
 UARTA_OBJS := $(patsubst uarta_lib/%.c,$(BUILD_DIR)/uarta_lib/%.obj,$(UARTA_SRCS))
@@ -254,6 +254,7 @@ audio_lib: $(AUDIO_LIB_OUT)
 	@if not exist release\include mkdir release\include
 	@if not exist release\lib mkdir release\lib
 	@copy /Y audio_lib\audio.h release\include\audio.h >nul
+	@copy /Y audio_lib\g711_codec.h release\include\g711_codec.h >nul
 	@copy /Y "$(call winpath,$(AUDIO_LIB_OUT))" release\lib\audio_lib.lib >nul
 
 spi_lib: $(SPI_LIB_OUT)
@@ -302,6 +303,7 @@ sync:
 	@if not exist release\include mkdir release\include
 	@if not exist release\lib mkdir release\lib
 	@if exist audio_lib\audio.h copy /Y audio_lib\audio.h release\include\audio.h >nul
+	@if exist audio_lib\g711_codec.h copy /Y audio_lib\g711_codec.h release\include\g711_codec.h >nul
 	@if exist spi_lib\spi.h copy /Y spi_lib\spi.h release\include\spi.h >nul
 	@if exist uarta_lib\uart.h copy /Y uarta_lib\uart.h release\include\uart.h >nul
 	@if exist timer0_lib\timer.h copy /Y timer0_lib\timer.h release\include\timer.h >nul

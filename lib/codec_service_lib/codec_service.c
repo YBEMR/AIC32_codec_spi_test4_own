@@ -1,6 +1,7 @@
 #include "codec_service.h"
 
 #include "audio.h"
+#include "g711_codec.h"
 #include "spi.h"
 
 typedef union {
@@ -58,25 +59,25 @@ Uint32 codec_service_get_record_count(void)
 #pragma CODE_SECTION(codec_service_encode_recorded, "ramfuncs");
 int16_t codec_service_encode_recorded(void)
 {
-    int16_t result;
+    Uint32 i;
 
     if (record_count == 0) {
         return CODEC_SERVICE_ERR_NO_RECORD;
     }
 
-    result = amr_encode_pcm16(
-            codec_workbuf.record_buf,
-            record_count,
-            &amr_output_buffer[1],
-            CODEC_SERVICE_AMR_BUF_SIZE - 1U,
-            &amr_len);
-
-    if (result != 0) {
+    if (record_count > (CODEC_SERVICE_AMR_BUF_SIZE - 1U)) {
         amr_len = 0;
         return CODEC_SERVICE_ERR_ENCODE;
     }
 
+    amr_len = (Uint16)record_count;
     amr_output_buffer[0] = (uint8_t)amr_len;
+
+    for (i = 0U; i < record_count; i++) {
+        amr_output_buffer[i + 1U] =
+                (uint8_t)(G711A_LinearToAlaw(codec_workbuf.record_buf[i]) & G711_OCTET_MASK);
+    }
+
     return CODEC_SERVICE_OK;
 }
 
@@ -113,22 +114,32 @@ int16_t codec_service_spi_exchange_second(void)
 #pragma CODE_SECTION(codec_service_decode_received, "ramfuncs");
 int16_t codec_service_decode_received(void)
 {
-    int16_t result;
+    Uint32 i;
+    Uint32 data_length;
+    uint8_t *pcm_ptr;
+    int16_t pcm_sample;
 
     if (received_amr_len == 0) {
         return CODEC_SERVICE_ERR_NO_RECORD;
     }
 
-    result = amr_decode_wav(&spi_receive_buffer[1],
-                            received_amr_len,
-                            codec_workbuf.wav_output_buffer,
-                            CODEC_SERVICE_WAV_BUF_SIZE,
-                            &wav_total_len);
-    if (result != 0) {
+    data_length = (Uint32)received_amr_len * 2UL;
+    if ((received_amr_len > CODEC_SERVICE_MAX_RECORD_CNT) ||
+        ((data_length + 44UL) > CODEC_SERVICE_WAV_BUF_SIZE)) {
         wav_total_len = 0;
         return CODEC_SERVICE_ERR_DECODE;
     }
 
+    create_wav_header(codec_workbuf.wav_output_buffer, data_length);
+
+    pcm_ptr = &codec_workbuf.wav_output_buffer[44U];
+    for (i = 0U; i < received_amr_len; i++) {
+        pcm_sample = G711A_AlawToLinear((Uint16)spi_receive_buffer[i + 1U]);
+        *pcm_ptr++ = (uint8_t)((Uint16)pcm_sample & 0x00FFU);
+        *pcm_ptr++ = (uint8_t)(((Uint16)pcm_sample >> 8U) & 0x00FFU);
+    }
+
+    wav_total_len = data_length + 44UL;
     play_offset = 44U;
     return CODEC_SERVICE_OK;
 }
