@@ -57,11 +57,10 @@ void spi_ready_init(PINT isr)
     // Enable CPU INT12
     IER |= M_INT12;
 
-    // GPIO10输入，GPIO11输出
-    // GPIO50 SLAVE_DATA_READY
-    // GPIO10 SLAVE_SPI_READY
-    // GPIO11 MASTER_DATA_REQ
-    // 空闲时均为高电平
+    // GPIO50 SLAVE_DATA_READY_N, MCU -> DSP, low active
+    // GPIO10 SLAVE_SPI_READY_N, MCU -> DSP, low active
+    // GPIO11 MASTER_DATA_REQ_N, DSP -> MCU, low active
+    // Idle level is high.
 
     EALLOW;
     GpioCtrlRegs.GPAMUX1.bit.GPIO10=0;
@@ -81,12 +80,7 @@ void spi_xon_init(void)
     EALLOW;
     SysCtrlRegs.PCLKCR3.bit.GPIOINENCLK = 1;    // Enable GPIO input clock
     EDIS;
-
-    // GPIO50 输入，GPIO10输入，GPIO11输出
-    // GPIO50 SLAVE_DATA_READY
-    // GPIO10 SLAVE_SPI_READY
-    // GPIO11 MASTER_DATA_REQ
-    // 空闲时均为高电平
+    
     EALLOW;
     // GPIO50 Configuration
     GpioCtrlRegs.GPBMUX2.bit.GPIO50 = 0;

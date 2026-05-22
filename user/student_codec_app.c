@@ -45,7 +45,7 @@ static Uint16 stream_spi_rx_packet[CODEC_SERVICE_STREAM_FRAME_OCTETS + 4U];
 static Uint32 stream_spi_tx_seq = 0;
 static Uint32 stream_spi_tx_sent_count = 0;
 static Uint32 stream_spi_tx_fail_count = 0;
-static Uint32 stream_spi_tx_data_ready_high_count = 0;
+static Uint32 stream_spi_tx_data_ready_active_count = 0;
 static Uint32 stream_spi_tx_req_start_us = 0;
 static Uint32 stream_spi_tx_last_send_us = 0;
 static Uint32 stream_spi_tx_last_ready_wait_us = 0;
@@ -71,9 +71,9 @@ static Uint32 app_get_tick_count(void);
 static void app_us_timer_init(void);
 static Uint32 app_get_us(void);
 static Uint32 app_elapsed_us(Uint32 start_us, Uint32 end_us);
-static Uint16 app_slave_spi_ready_is_high(void);
-static Uint16 app_slave_data_ready_is_high(void);
-static void app_master_data_req_set(Uint16 high);
+static Uint16 app_slave_spi_ready_is_active(void);
+static Uint16 app_slave_data_ready_is_active(void);
+static void app_master_data_req_set(Uint16 active);
 static void app_stream_loopback_start(void);
 static void app_stream_loopback_stop(void);
 static void app_stream_loopback_drain_pipeline(void);
@@ -447,22 +447,22 @@ static Uint32 app_elapsed_us(Uint32 start_us, Uint32 end_us)
     return end_us - start_us;
 }
 
-static Uint16 app_slave_spi_ready_is_high(void)
+static Uint16 app_slave_spi_ready_is_active(void)
 {
-    return (GpioDataRegs.GPADAT.bit.GPIO10 != 0U) ? 1U : 0U;
+    return (GpioDataRegs.GPADAT.bit.GPIO10 == 0U) ? 1U : 0U;
 }
 
-static Uint16 app_slave_data_ready_is_high(void)
+static Uint16 app_slave_data_ready_is_active(void)
 {
-    return (GpioDataRegs.GPBDAT.bit.GPIO50 != 0U) ? 1U : 0U;
+    return (GpioDataRegs.GPBDAT.bit.GPIO50 == 0U) ? 1U : 0U;
 }
 
-static void app_master_data_req_set(Uint16 high)
+static void app_master_data_req_set(Uint16 active)
 {
-    if (high != 0U) {
-        GpioDataRegs.GPASET.bit.GPIO11 = 1U;
-    } else {
+    if (active != 0U) {
         GpioDataRegs.GPACLEAR.bit.GPIO11 = 1U;
+    } else {
+        GpioDataRegs.GPASET.bit.GPIO11 = 1U;
     }
 }
 
@@ -496,7 +496,7 @@ static void app_stream_spi_tx_start(void)
     stream_spi_tx_seq = 0;
     stream_spi_tx_sent_count = 0;
     stream_spi_tx_fail_count = 0;
-    stream_spi_tx_data_ready_high_count = 0;
+    stream_spi_tx_data_ready_active_count = 0;
     stream_spi_tx_req_start_us = 0;
     stream_spi_tx_last_send_us = 0;
     stream_spi_tx_last_ready_wait_us = 0;
@@ -542,8 +542,8 @@ static void app_stream_spi_tx_service(void)
         return;
     }
 
-    if (app_slave_data_ready_is_high() != 0U) {
-        stream_spi_tx_data_ready_high_count++;
+    if (app_slave_data_ready_is_active() != 0U) {
+        stream_spi_tx_data_ready_active_count++;
     }
 
     if (stream_spi_tx_req_active == 0U) {
@@ -552,14 +552,13 @@ static void app_stream_spi_tx_service(void)
         app_master_data_req_set(1U);
     }
 
-    if (app_slave_spi_ready_is_high() == 0U) {
+    if (app_slave_spi_ready_is_active() == 0U) {
         return;
     }
 
     now_us = app_get_us();
     stream_spi_tx_last_ready_wait_us =
             app_elapsed_us(stream_spi_tx_req_start_us, now_us);
-
     app_master_data_req_set(0U);
     stream_spi_tx_req_active = 0;
 
@@ -597,7 +596,7 @@ static void app_stream_spi_tx_service(void)
     stream_spi_tx_last_send_us = spi_start_us;
 
     ready_wait_start_us = app_get_us();
-    while (app_slave_spi_ready_is_high() != 0U) {
+    while (app_slave_spi_ready_is_active() != 0U) {
         ready_wait_now_us = app_get_us();
         if (app_elapsed_us(ready_wait_start_us,
                            ready_wait_now_us) > APP_STREAM_SPI_READY_TIMEOUT_US) {
@@ -719,8 +718,8 @@ static void app_stream_spi_tx_print_status(void)
     UARTa_SendStringAndNumber("int_us:",
                               (int32)stream_spi_tx_last_interval_us,
                               " ");
-    UARTa_SendStringAndNumber("drdy:",
-                              (int32)stream_spi_tx_data_ready_high_count,
+    UARTa_SendStringAndNumber("drdy_act:",
+                              (int32)stream_spi_tx_data_ready_active_count,
                               " ");
     UARTa_SendStringAndNumber("fail:",
                               (int32)stream_spi_tx_fail_count,
