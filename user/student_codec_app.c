@@ -20,7 +20,8 @@ typedef enum {
     APP_STATE_RECEIVE_READY,
     APP_STATE_DECODE,
     APP_STATE_PLAY,
-    APP_STATE_STREAM_LOOPBACK
+    APP_STATE_STREAM_LOOPBACK,
+    APP_STATE_STREAM_SPI_TX
 } app_state_t;
 
 static volatile app_state_t current_state = APP_STATE_IDLE;
@@ -31,23 +32,56 @@ static volatile Uint32 key_decode_press_time = 0;
 static volatile Uint16 spi_ready_flag = 0;
 static volatile Uint16 stream_loopback_start_pending = 0;
 static volatile Uint16 stream_loopback_stop_pending = 0;
+static volatile Uint16 stream_spi_tx_start_pending = 0;
+static volatile Uint16 stream_spi_tx_stop_pending = 0;
 static volatile Uint32 tick_count = 0;
 static volatile Uint16 mcbsp_word_phase = 0;
 static volatile Uint16 play_sample_hold = 0;
 static Uint16 stream_loopback_frame[CODEC_SERVICE_STREAM_FRAME_OCTETS];
 static Uint32 stream_loopback_frames = 0;
+static Uint16 stream_spi_tx_frame[CODEC_SERVICE_STREAM_FRAME_OCTETS];
+static Uint16 stream_spi_tx_packet[CODEC_SERVICE_STREAM_FRAME_OCTETS + 4U];
+static Uint16 stream_spi_rx_packet[CODEC_SERVICE_STREAM_FRAME_OCTETS + 4U];
+static Uint32 stream_spi_tx_seq = 0;
+static Uint32 stream_spi_tx_sent_count = 0;
+static Uint32 stream_spi_tx_fail_count = 0;
+static Uint32 stream_spi_tx_data_ready_high_count = 0;
+static Uint32 stream_spi_tx_req_start_us = 0;
+static Uint32 stream_spi_tx_last_send_us = 0;
+static Uint32 stream_spi_tx_last_ready_wait_us = 0;
+static Uint32 stream_spi_tx_last_spi_us = 0;
+static Uint32 stream_spi_tx_last_interval_us = 0;
+static Uint16 stream_spi_tx_req_active = 0;
 
 #define KEY_DEBOUNCE_MS 260U
 #define APP_MONO_RECORD_WORD_SELECT 0U
 #define APP_STREAM_LOOPBACK_LOG_FRAMES 50UL
 #define APP_STREAM_LOOPBACK_PERIODIC_LOG 0U
+#define APP_IDLE_TEST_MODE_LOOPBACK 0U
+#define APP_IDLE_TEST_MODE_SPI_TX   1U
+#define APP_IDLE_TEST_MODE          APP_IDLE_TEST_MODE_SPI_TX
+#define APP_STREAM_SPI_MAGIC        0x4711U
+#define APP_STREAM_SPI_HEADER_WORDS  4U
+#define APP_STREAM_SPI_PACKET_WORDS  (APP_STREAM_SPI_HEADER_WORDS + \
+                                      CODEC_SERVICE_STREAM_FRAME_OCTETS)
+#define APP_STREAM_SPI_READY_TIMEOUT_US 20000UL
 
 static void init_zone7(void);
 static Uint32 app_get_tick_count(void);
+static void app_us_timer_init(void);
+static Uint32 app_get_us(void);
+static Uint32 app_elapsed_us(Uint32 start_us, Uint32 end_us);
+static Uint16 app_slave_spi_ready_is_high(void);
+static Uint16 app_slave_data_ready_is_high(void);
+static void app_master_data_req_set(Uint16 high);
 static void app_stream_loopback_start(void);
 static void app_stream_loopback_stop(void);
 static void app_stream_loopback_drain_pipeline(void);
 static void app_stream_loopback_print_status(void);
+static void app_stream_spi_tx_start(void);
+static void app_stream_spi_tx_stop(void);
+static void app_stream_spi_tx_service(void);
+static void app_stream_spi_tx_print_status(void);
 static void delay(void);
 void Delay(int16_t time);
 
@@ -97,6 +131,7 @@ int16_t main(int16_t argc, char **argv)
     IER |= M_INT6;
 
     TIM0_Init(150, 10000, TIM0_IRQn);
+    app_us_timer_init();
 
     EINT;
     ERTM;
@@ -113,13 +148,28 @@ int16_t main(int16_t argc, char **argv)
             app_stream_loopback_stop();
         }
 
+        if (stream_spi_tx_stop_pending != 0U) {
+            stream_spi_tx_stop_pending = 0U;
+            app_stream_spi_tx_stop();
+        }
+
         if (stream_loopback_start_pending != 0U) {
             stream_loopback_start_pending = 0U;
             app_stream_loopback_start();
         }
 
+        if (stream_spi_tx_start_pending != 0U) {
+            stream_spi_tx_start_pending = 0U;
+            app_stream_spi_tx_start();
+        }
+
         if (current_state == APP_STATE_STREAM_LOOPBACK) {
             app_stream_loopback_drain_pipeline();
+            continue;
+        }
+
+        if (current_state == APP_STATE_STREAM_SPI_TX) {
+            app_stream_spi_tx_service();
             continue;
         }
 
@@ -252,9 +302,15 @@ interrupt void TIM0_IRQn(void)
         if (current_state == APP_STATE_RECEIVE_READY) {
             current_state = APP_STATE_DECODE;
         } else if (current_state == APP_STATE_IDLE) {
+#if APP_IDLE_TEST_MODE == APP_IDLE_TEST_MODE_SPI_TX
+            stream_spi_tx_start_pending = 1U;
+#else
             stream_loopback_start_pending = 1U;
+#endif
         } else if (current_state == APP_STATE_STREAM_LOOPBACK) {
             stream_loopback_stop_pending = 1U;
+        } else if (current_state == APP_STATE_STREAM_SPI_TX) {
+            stream_spi_tx_stop_pending = 1U;
         }
 
         key_decode_pressed_flag = 0;
@@ -306,6 +362,11 @@ interrupt void ISRMcbspSend(void)
             }
         }
         McbspaRegs.DXR1.all = play_sample_hold;
+    } else if (current_state == APP_STATE_STREAM_SPI_TX) {
+        if (word_phase == APP_MONO_RECORD_WORD_SELECT) {
+            codec_service_stream_record_sample(temp);
+        }
+        McbspaRegs.DXR1.all = 0;
     } else if (current_state == APP_STATE_PLAY) {
         // 将单声道数据复制到左右声道输出，以实现单声道播放
         // 在相位0读一个样本，在相位1输出同一个样本
@@ -359,6 +420,52 @@ static Uint32 app_get_tick_count(void)
     return tick_count;
 }
 
+static void app_us_timer_init(void)
+{
+    EALLOW;
+    SysCtrlRegs.PCLKCR3.bit.CPUTIMER1ENCLK = 1;
+    EDIS;
+
+    CpuTimer1Regs.PRD.all = 0xFFFFFFFFUL;
+    CpuTimer1Regs.TPR.all = 149U;
+    CpuTimer1Regs.TPRH.all = 0U;
+    CpuTimer1Regs.TCR.bit.TSS = 1U;
+    CpuTimer1Regs.TCR.bit.TRB = 1U;
+    CpuTimer1Regs.TCR.bit.TIE = 0U;
+    CpuTimer1Regs.TCR.bit.FREE = 1U;
+    CpuTimer1Regs.TCR.bit.SOFT = 1U;
+    CpuTimer1Regs.TCR.bit.TSS = 0U;
+}
+
+static Uint32 app_get_us(void)
+{
+    return 0xFFFFFFFFUL - CpuTimer1Regs.TIM.all;
+}
+
+static Uint32 app_elapsed_us(Uint32 start_us, Uint32 end_us)
+{
+    return end_us - start_us;
+}
+
+static Uint16 app_slave_spi_ready_is_high(void)
+{
+    return (GpioDataRegs.GPADAT.bit.GPIO10 != 0U) ? 1U : 0U;
+}
+
+static Uint16 app_slave_data_ready_is_high(void)
+{
+    return (GpioDataRegs.GPBDAT.bit.GPIO50 != 0U) ? 1U : 0U;
+}
+
+static void app_master_data_req_set(Uint16 high)
+{
+    if (high != 0U) {
+        GpioDataRegs.GPASET.bit.GPIO11 = 1U;
+    } else {
+        GpioDataRegs.GPACLEAR.bit.GPIO11 = 1U;
+    }
+}
+
 static void app_stream_loopback_start(void)
 {
     codec_service_stream_reset();
@@ -378,6 +485,129 @@ static void app_stream_loopback_stop(void)
     play_sample_hold = 0;
     UARTa_SendString("Stream loopback stop.\r\n");
     app_stream_loopback_print_status();
+}
+
+static void app_stream_spi_tx_start(void)
+{
+    codec_service_stream_reset();
+    codec_service_stream_start_capture();
+    mcbsp_word_phase = 0;
+    play_sample_hold = 0;
+    stream_spi_tx_seq = 0;
+    stream_spi_tx_sent_count = 0;
+    stream_spi_tx_fail_count = 0;
+    stream_spi_tx_data_ready_high_count = 0;
+    stream_spi_tx_req_start_us = 0;
+    stream_spi_tx_last_send_us = 0;
+    stream_spi_tx_last_ready_wait_us = 0;
+    stream_spi_tx_last_spi_us = 0;
+    stream_spi_tx_last_interval_us = 0;
+    stream_spi_tx_req_active = 0;
+    app_master_data_req_set(0U);
+    current_state = APP_STATE_STREAM_SPI_TX;
+    UARTa_SendString("Stream SPI TX start.\r\n");
+}
+
+static void app_stream_spi_tx_stop(void)
+{
+    codec_service_stream_stop_capture();
+    app_master_data_req_set(0U);
+    stream_spi_tx_req_active = 0;
+    current_state = APP_STATE_IDLE;
+    mcbsp_word_phase = 0;
+    play_sample_hold = 0;
+    UARTa_SendString("Stream SPI TX stop.\r\n");
+    app_stream_spi_tx_print_status();
+}
+
+static void app_stream_spi_tx_service(void)
+{
+    Uint16 out_words;
+    Uint16 i;
+    Uint32 now_us;
+    Uint32 spi_start_us;
+    Uint32 spi_end_us;
+    Uint32 ready_wait_start_us;
+    Uint32 ready_wait_now_us;
+
+    while (codec_service_stream_has_pcm_frame() != 0U) {
+        if (codec_service_stream_process_encode() != CODEC_SERVICE_OK) {
+            break;
+        }
+    }
+
+    if (codec_service_stream_has_encoded_frame() == 0U) {
+        app_master_data_req_set(0U);
+        stream_spi_tx_req_active = 0;
+        return;
+    }
+
+    if (app_slave_data_ready_is_high() != 0U) {
+        stream_spi_tx_data_ready_high_count++;
+    }
+
+    if (stream_spi_tx_req_active == 0U) {
+        stream_spi_tx_req_active = 1U;
+        stream_spi_tx_req_start_us = app_get_us();
+        app_master_data_req_set(1U);
+    }
+
+    if (app_slave_spi_ready_is_high() == 0U) {
+        return;
+    }
+
+    now_us = app_get_us();
+    stream_spi_tx_last_ready_wait_us =
+            app_elapsed_us(stream_spi_tx_req_start_us, now_us);
+
+    app_master_data_req_set(0U);
+    stream_spi_tx_req_active = 0;
+
+    if (codec_service_stream_get_encoded_frame(stream_spi_tx_frame,
+                                               CODEC_SERVICE_STREAM_FRAME_OCTETS,
+                                               &out_words) != CODEC_SERVICE_OK) {
+        return;
+    }
+
+    if (out_words != CODEC_SERVICE_STREAM_FRAME_OCTETS) {
+        stream_spi_tx_fail_count++;
+        return;
+    }
+
+    stream_spi_tx_packet[0] = APP_STREAM_SPI_MAGIC;
+    stream_spi_tx_packet[1] = (Uint16)(stream_spi_tx_seq & 0xFFFFUL);
+    stream_spi_tx_packet[2] = (Uint16)((stream_spi_tx_seq >> 16) & 0xFFFFUL);
+    stream_spi_tx_packet[3] = CODEC_SERVICE_STREAM_FRAME_OCTETS;
+    for (i = 0U; i < CODEC_SERVICE_STREAM_FRAME_OCTETS; i++) {
+        stream_spi_tx_packet[i + APP_STREAM_SPI_HEADER_WORDS] =
+                stream_spi_tx_frame[i] & 0x00FFU;
+    }
+
+    spi_start_us = app_get_us();
+    if (stream_spi_tx_last_send_us != 0UL) {
+        stream_spi_tx_last_interval_us =
+                app_elapsed_us(stream_spi_tx_last_send_us, spi_start_us);
+    }
+
+    spi_send_and_receive(stream_spi_tx_packet,
+                         stream_spi_rx_packet,
+                         APP_STREAM_SPI_PACKET_WORDS);
+    spi_end_us = app_get_us();
+    stream_spi_tx_last_spi_us = app_elapsed_us(spi_start_us, spi_end_us);
+    stream_spi_tx_last_send_us = spi_start_us;
+
+    ready_wait_start_us = app_get_us();
+    while (app_slave_spi_ready_is_high() != 0U) {
+        ready_wait_now_us = app_get_us();
+        if (app_elapsed_us(ready_wait_start_us,
+                           ready_wait_now_us) > APP_STREAM_SPI_READY_TIMEOUT_US) {
+            stream_spi_tx_fail_count++;
+            break;
+        }
+    }
+
+    stream_spi_tx_seq++;
+    stream_spi_tx_sent_count++;
 }
 
 static void app_stream_loopback_drain_pipeline(void)
@@ -460,6 +690,40 @@ static void app_stream_loopback_print_status(void)
                               " ");
     UARTa_SendStringAndNumber("max_play:",
                               codec_service_stream_get_max_play_frame_count(),
+                              "\r\n");
+}
+
+static void app_stream_spi_tx_print_status(void)
+{
+    UARTa_SendStringAndNumber("TX seq:",
+                              (int32)stream_spi_tx_seq,
+                              " ");
+    UARTa_SendStringAndNumber("pcm:",
+                              codec_service_stream_get_pcm_frame_count(),
+                              " ");
+    UARTa_SendStringAndNumber("enc:",
+                              codec_service_stream_get_encoded_frame_count(),
+                              " ");
+    UARTa_SendStringAndNumber("ov:",
+                              codec_service_stream_get_overflow_count(),
+                              " ");
+    UARTa_SendStringAndNumber("uf:",
+                              codec_service_stream_get_underflow_count(),
+                              " ");
+    UARTa_SendStringAndNumber("rw_us:",
+                              (int32)stream_spi_tx_last_ready_wait_us,
+                              " ");
+    UARTa_SendStringAndNumber("spi_us:",
+                              (int32)stream_spi_tx_last_spi_us,
+                              " ");
+    UARTa_SendStringAndNumber("int_us:",
+                              (int32)stream_spi_tx_last_interval_us,
+                              " ");
+    UARTa_SendStringAndNumber("drdy:",
+                              (int32)stream_spi_tx_data_ready_high_count,
+                              " ");
+    UARTa_SendStringAndNumber("fail:",
+                              (int32)stream_spi_tx_fail_count,
                               "\r\n");
 }
 
