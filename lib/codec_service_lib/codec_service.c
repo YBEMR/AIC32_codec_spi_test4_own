@@ -21,6 +21,12 @@ static int16 stream_capture_frame[CODEC_SERVICE_STREAM_FRAME_SAMPLES];
 static Uint16 stream_capture_index = 0;
 static Uint16 stream_capture_active = 0;
 
+static int16 stream_pcm_frames[CODEC_SERVICE_STREAM_PCM_FRAME_CAPACITY]
+                              [CODEC_SERVICE_STREAM_FRAME_SAMPLES];
+static Uint16 stream_pcm_read_index = 0;
+static Uint16 stream_pcm_write_index = 0;
+static Uint16 stream_pcm_frame_count = 0;
+
 static Uint16 stream_encoded_frames[CODEC_SERVICE_STREAM_ENCODED_FRAME_CAPACITY]
                                   [CODEC_SERVICE_STREAM_FRAME_OCTETS];
 static Uint16 stream_encoded_read_index = 0;
@@ -41,6 +47,16 @@ static Uint16 codec_service_stream_next_encoded_index(Uint16 index)
 {
     index++;
     if (index >= CODEC_SERVICE_STREAM_ENCODED_FRAME_CAPACITY) {
+        index = 0;
+    }
+
+    return index;
+}
+
+static Uint16 codec_service_stream_next_pcm_index(Uint16 index)
+{
+    index++;
+    if (index >= CODEC_SERVICE_STREAM_PCM_FRAME_CAPACITY) {
         index = 0;
     }
 
@@ -220,6 +236,10 @@ void codec_service_stream_reset(void)
     stream_capture_index = 0;
     stream_capture_active = 0;
 
+    stream_pcm_read_index = 0;
+    stream_pcm_write_index = 0;
+    stream_pcm_frame_count = 0;
+
     stream_encoded_read_index = 0;
     stream_encoded_write_index = 0;
     stream_encoded_frame_count = 0;
@@ -247,6 +267,8 @@ void codec_service_stream_stop_capture(void)
 
 int16_t codec_service_stream_record_sample(int16_t sample)
 {
+    Uint16 i;
+
     if (stream_capture_active == 0U) {
         return CODEC_SERVICE_ERR_NO_RECORD;
     }
@@ -259,15 +281,47 @@ int16_t codec_service_stream_record_sample(int16_t sample)
 
     stream_capture_index = 0;
 
+    if (stream_pcm_frame_count >= CODEC_SERVICE_STREAM_PCM_FRAME_CAPACITY) {
+        stream_overflow_count++;
+        return CODEC_SERVICE_ERR_OVERFLOW;
+    }
+
+    for (i = 0U; i < CODEC_SERVICE_STREAM_FRAME_SAMPLES; i++) {
+        stream_pcm_frames[stream_pcm_write_index][i] = stream_capture_frame[i];
+    }
+
+    stream_pcm_write_index =
+            codec_service_stream_next_pcm_index(stream_pcm_write_index);
+    stream_pcm_frame_count++;
+
+    return CODEC_SERVICE_FRAME_READY;
+}
+
+Uint16 codec_service_stream_has_pcm_frame(void)
+{
+    return (stream_pcm_frame_count > 0U) ? 1U : 0U;
+}
+
+int16_t codec_service_stream_process_encode(void)
+{
+    if (stream_pcm_frame_count == 0U) {
+        stream_underflow_count++;
+        return CODEC_SERVICE_ERR_UNDERFLOW;
+    }
+
     if (stream_encoded_frame_count >=
             CODEC_SERVICE_STREAM_ENCODED_FRAME_CAPACITY) {
         stream_overflow_count++;
         return CODEC_SERVICE_ERR_OVERFLOW;
     }
 
-    G711A_EncodeFrame(stream_capture_frame,
+    G711A_EncodeFrame(stream_pcm_frames[stream_pcm_read_index],
                       stream_encoded_frames[stream_encoded_write_index],
                       CODEC_SERVICE_STREAM_FRAME_SAMPLES);
+
+    stream_pcm_read_index =
+            codec_service_stream_next_pcm_index(stream_pcm_read_index);
+    stream_pcm_frame_count--;
 
     stream_encoded_write_index =
             codec_service_stream_next_encoded_index(stream_encoded_write_index);
@@ -364,6 +418,11 @@ int16_t codec_service_stream_get_play_sample(Uint16 *sample)
     }
 
     return CODEC_SERVICE_OK;
+}
+
+Uint32 codec_service_stream_get_pcm_frame_count(void)
+{
+    return (Uint32)stream_pcm_frame_count;
 }
 
 Uint32 codec_service_stream_get_encoded_frame_count(void)

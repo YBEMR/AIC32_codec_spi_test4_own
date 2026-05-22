@@ -19,7 +19,8 @@ typedef enum {
     APP_STATE_G711_READY,
     APP_STATE_RECEIVE_READY,
     APP_STATE_DECODE,
-    APP_STATE_PLAY
+    APP_STATE_PLAY,
+    APP_STATE_STREAM_LOOPBACK
 } app_state_t;
 
 static volatile app_state_t current_state = APP_STATE_IDLE;
@@ -31,12 +32,19 @@ static volatile Uint16 spi_ready_flag = 0;
 static volatile Uint32 tick_count = 0;
 static volatile Uint16 mcbsp_word_phase = 0;
 static volatile Uint16 play_sample_hold = 0;
+static Uint16 stream_loopback_frame[CODEC_SERVICE_STREAM_FRAME_OCTETS];
+static Uint32 stream_loopback_frames = 0;
 
 #define KEY_DEBOUNCE_MS 260U
 #define APP_MONO_RECORD_WORD_SELECT 0U
+#define APP_STREAM_LOOPBACK_LOG_FRAMES 50UL
 
 static void init_zone7(void);
 static Uint32 app_get_tick_count(void);
+static void app_stream_loopback_start(void);
+static void app_stream_loopback_stop(void);
+static void app_stream_loopback_drain_pipeline(void);
+static void app_stream_loopback_print_status(void);
 static void delay(void);
 void Delay(int16_t time);
 
@@ -96,6 +104,11 @@ int16_t main(int16_t argc, char **argv)
     UARTa_SendString("AIC32 codec SPI own app ready.\r\n");
 
     while (1) {
+        if (current_state == APP_STATE_STREAM_LOOPBACK) {
+            app_stream_loopback_drain_pipeline();
+            continue;
+        }
+
         LED1_TOGGLE;
         delay();
 
@@ -227,6 +240,10 @@ interrupt void TIM0_IRQn(void)
     if (key_decode_pressed_flag && (tick_count - key_decode_press_time >= KEY_DEBOUNCE_MS / 10U)) {
         if (current_state == APP_STATE_RECEIVE_READY) {
             current_state = APP_STATE_DECODE;
+        } else if (current_state == APP_STATE_IDLE) {
+            app_stream_loopback_start();
+        } else if (current_state == APP_STATE_STREAM_LOOPBACK) {
+            app_stream_loopback_stop();
         }
 
         key_decode_pressed_flag = 0;
@@ -261,6 +278,17 @@ interrupt void ISRMcbspSend(void)
             codec_service_record_sample(temp);
         }
         McbspaRegs.DXR1.all = temp;
+    } else if (current_state == APP_STATE_STREAM_LOOPBACK) {
+        if (word_phase == APP_MONO_RECORD_WORD_SELECT) {
+            codec_service_stream_record_sample(temp);
+            if (codec_service_stream_get_play_sample(&sample) ==
+                    CODEC_SERVICE_OK) {
+                play_sample_hold = sample;
+            } else {
+                play_sample_hold = 0;
+            }
+        }
+        McbspaRegs.DXR1.all = play_sample_hold;
     } else if (current_state == APP_STATE_PLAY) {
         // 将单声道数据复制到左右声道输出，以实现单声道播放
         // 在相位0读一个样本，在相位1输出同一个样本
@@ -312,6 +340,81 @@ static void init_zone7(void)
 static Uint32 app_get_tick_count(void)
 {
     return tick_count;
+}
+
+static void app_stream_loopback_start(void)
+{
+    codec_service_stream_reset();
+    codec_service_stream_start_capture();
+    mcbsp_word_phase = 0;
+    play_sample_hold = 0;
+    stream_loopback_frames = 0;
+    current_state = APP_STATE_STREAM_LOOPBACK;
+    UARTa_SendString("Stream loopback start.\r\n");
+}
+
+static void app_stream_loopback_stop(void)
+{
+    codec_service_stream_stop_capture();
+    current_state = APP_STATE_IDLE;
+    mcbsp_word_phase = 0;
+    play_sample_hold = 0;
+    UARTa_SendString("Stream loopback stop.\r\n");
+    app_stream_loopback_print_status();
+}
+
+static void app_stream_loopback_drain_pipeline(void)
+{
+    Uint16 out_words;
+
+    while (codec_service_stream_has_pcm_frame() != 0U) {
+        if (codec_service_stream_process_encode() != CODEC_SERVICE_OK) {
+            break;
+        }
+    }
+
+    while ((codec_service_stream_has_encoded_frame() != 0U) &&
+           (codec_service_stream_get_play_frame_count() <
+            CODEC_SERVICE_STREAM_PLAY_FRAME_CAPACITY)) {
+        if (codec_service_stream_get_encoded_frame(stream_loopback_frame,
+                                                  CODEC_SERVICE_STREAM_FRAME_OCTETS,
+                                                  &out_words) != CODEC_SERVICE_OK) {
+            break;
+        }
+
+        if (out_words != CODEC_SERVICE_STREAM_FRAME_OCTETS) {
+            break;
+        }
+
+        if (codec_service_stream_put_play_frame(stream_loopback_frame,
+                                                out_words) != CODEC_SERVICE_OK) {
+            break;
+        }
+
+        stream_loopback_frames++;
+        if ((stream_loopback_frames % APP_STREAM_LOOPBACK_LOG_FRAMES) == 0UL) {
+            app_stream_loopback_print_status();
+        }
+    }
+}
+
+static void app_stream_loopback_print_status(void)
+{
+    UARTa_SendStringAndNumber("S pcm:",
+                              codec_service_stream_get_pcm_frame_count(),
+                              " ");
+    UARTa_SendStringAndNumber("enc:",
+                              codec_service_stream_get_encoded_frame_count(),
+                              " ");
+    UARTa_SendStringAndNumber("play:",
+                              codec_service_stream_get_play_frame_count(),
+                              " ");
+    UARTa_SendStringAndNumber("ov:",
+                              codec_service_stream_get_overflow_count(),
+                              " ");
+    UARTa_SendStringAndNumber("uf:",
+                              codec_service_stream_get_underflow_count(),
+                              "\r\n");
 }
 
 static void delay(void)

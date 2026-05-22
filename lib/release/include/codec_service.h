@@ -12,6 +12,7 @@
 
 #define CODEC_SERVICE_STREAM_FRAME_SAMPLES            G711_FRAME_SAMPLES
 #define CODEC_SERVICE_STREAM_FRAME_OCTETS             G711_FRAME_OCTETS
+#define CODEC_SERVICE_STREAM_PCM_FRAME_CAPACITY       4U
 #define CODEC_SERVICE_STREAM_ENCODED_FRAME_CAPACITY   4U
 #define CODEC_SERVICE_STREAM_PLAY_FRAME_CAPACITY      4U
 
@@ -24,6 +25,7 @@
 #define CODEC_SERVICE_ERR_UNDERFLOW     -6
 #define CODEC_SERVICE_ERR_PARAM         -7
 #define CODEC_SERVICE_PLAY_DONE          1
+#define CODEC_SERVICE_FRAME_READY        2
 
 #define SPI_DATASIZE_8BIT  0
 #define SPI_DATASIZE_16BIT 1
@@ -61,6 +63,8 @@ void codec_service_stream_reset(void);
 void codec_service_stream_start_capture(void);
 void codec_service_stream_stop_capture(void);
 int16_t codec_service_stream_record_sample(int16_t sample);
+Uint16 codec_service_stream_has_pcm_frame(void);
+int16_t codec_service_stream_process_encode(void);
 Uint16 codec_service_stream_has_encoded_frame(void);
 int16_t codec_service_stream_get_encoded_frame(Uint16 *frame_words,
                                                Uint16 max_words,
@@ -68,6 +72,7 @@ int16_t codec_service_stream_get_encoded_frame(Uint16 *frame_words,
 int16_t codec_service_stream_put_play_frame(const Uint16 *g711_words,
                                             Uint16 octets);
 int16_t codec_service_stream_get_play_sample(Uint16 *sample);
+Uint32 codec_service_stream_get_pcm_frame_count(void);
 Uint32 codec_service_stream_get_encoded_frame_count(void);
 Uint32 codec_service_stream_get_play_frame_count(void);
 Uint32 codec_service_stream_get_overflow_count(void);
