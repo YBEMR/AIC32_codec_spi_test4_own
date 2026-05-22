@@ -56,6 +56,24 @@ void spi_ready_init(PINT isr)
 
     // Enable CPU INT12
     IER |= M_INT12;
+
+    // GPIO10输入，GPIO11输出
+    // GPIO50 SLAVE_DATA_READY
+    // GPIO10 SLAVE_SPI_READY
+    // GPIO11 MASTER_DATA_REQ
+    // 空闲时均为高电平
+
+    EALLOW;
+    GpioCtrlRegs.GPAMUX1.bit.GPIO10=0;
+    GpioCtrlRegs.GPADIR.bit.GPIO10=0;
+    GpioCtrlRegs.GPAPUD.bit.GPIO10=0;
+
+    GpioCtrlRegs.GPAMUX1.bit.GPIO11=0;
+    GpioCtrlRegs.GPADIR.bit.GPIO11=1;
+    GpioCtrlRegs.GPAPUD.bit.GPIO11=0;
+
+    GpioDataRegs.GPASET.bit.GPIO11=1;
+    EDIS;
 }
 
 void spi_send_and_receive(const Uint16 *send_buffer, Uint16 *receive_buffer, Uint16 length)
