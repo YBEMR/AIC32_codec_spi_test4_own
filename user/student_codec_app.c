@@ -29,6 +29,8 @@ static volatile Uint32 key_encode_press_time = 0;
 static volatile Uint16 key_decode_pressed_flag = 0;
 static volatile Uint32 key_decode_press_time = 0;
 static volatile Uint16 spi_ready_flag = 0;
+static volatile Uint16 stream_loopback_start_pending = 0;
+static volatile Uint16 stream_loopback_stop_pending = 0;
 static volatile Uint32 tick_count = 0;
 static volatile Uint16 mcbsp_word_phase = 0;
 static volatile Uint16 play_sample_hold = 0;
@@ -105,13 +107,23 @@ int16_t main(int16_t argc, char **argv)
     UARTa_SendString("AIC32 codec SPI own app ready.\r\n");
 
     while (1) {
+        if (stream_loopback_stop_pending != 0U) {
+            stream_loopback_stop_pending = 0U;
+            app_stream_loopback_stop();
+        }
+
+        if (stream_loopback_start_pending != 0U) {
+            stream_loopback_start_pending = 0U;
+            app_stream_loopback_start();
+        }
+
         if (current_state == APP_STATE_STREAM_LOOPBACK) {
             app_stream_loopback_drain_pipeline();
             continue;
         }
 
-        LED1_TOGGLE;
-        delay();
+        // LED1_TOGGLE;
+        // delay();
 
         if (current_state == APP_STATE_ENCODE) {
             Uint32 encode_start_tick;
@@ -242,9 +254,9 @@ interrupt void TIM0_IRQn(void)
         if (current_state == APP_STATE_RECEIVE_READY) {
             current_state = APP_STATE_DECODE;
         } else if (current_state == APP_STATE_IDLE) {
-            app_stream_loopback_start();
+            stream_loopback_start_pending = 1U;
         } else if (current_state == APP_STATE_STREAM_LOOPBACK) {
-            app_stream_loopback_stop();
+            stream_loopback_stop_pending = 1U;
         }
 
         key_decode_pressed_flag = 0;
