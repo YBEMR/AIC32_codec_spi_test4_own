@@ -122,9 +122,6 @@ int16_t main(int16_t argc, char **argv)
             continue;
         }
 
-        // LED1_TOGGLE;
-        // delay();
-
         if (current_state == APP_STATE_ENCODE) {
             Uint32 encode_start_tick;
             Uint32 encode_elapsed_ms;
@@ -263,6 +260,12 @@ interrupt void TIM0_IRQn(void)
         LED3_TOGGLE;
     }
 
+    static Uint16 temp_count = 0;
+    if(++temp_count >= 50){
+        temp_count = 0;
+        LED1_TOGGLE;
+    }
+    
     PieCtrlRegs.PIEACK.bit.ACK1 = 1;
     CpuTimer0Regs.TCR.bit.TIF = 1;
     CpuTimer0Regs.TCR.bit.TRB = 1;
