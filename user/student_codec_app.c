@@ -77,7 +77,8 @@ int16_t main(int16_t argc, char **argv)
     EXINT2_Init(EXINT2_IRQn);
 
     InitSpiaGpio();
-    spi_ready_init(SPI_READY_IRQn);
+    spi_xon_init(); //流控引脚初始化
+    // spi_ready_init(SPI_READY_IRQn);
     spi_init();
 
     InitMcbspaGpio();
