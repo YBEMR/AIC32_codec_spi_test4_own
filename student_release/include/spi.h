@@ -10,6 +10,7 @@
 
 void spi_init(void);
 void spi_ready_init(PINT isr);
+void spi_xon_init(void);
 void spi_send_and_receive(const Uint16 *send_buffer, Uint16 *receive_buffer, Uint16 length);
 void spi_send_bulk(Uint16* buffer, Uint16 *receive_buffer, Uint16 length);
 int16 spi_lookback_test(Uint16 *send_buffer, Uint16 *receive_buffer, Uint16 length);
