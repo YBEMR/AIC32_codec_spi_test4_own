@@ -38,6 +38,7 @@ static Uint32 stream_loopback_frames = 0;
 #define KEY_DEBOUNCE_MS 260U
 #define APP_MONO_RECORD_WORD_SELECT 0U
 #define APP_STREAM_LOOPBACK_LOG_FRAMES 50UL
+#define APP_STREAM_LOOPBACK_PERIODIC_LOG 0U
 
 static void init_zone7(void);
 static Uint32 app_get_tick_count(void);
@@ -392,9 +393,11 @@ static void app_stream_loopback_drain_pipeline(void)
         }
 
         stream_loopback_frames++;
+#if APP_STREAM_LOOPBACK_PERIODIC_LOG
         if ((stream_loopback_frames % APP_STREAM_LOOPBACK_LOG_FRAMES) == 0UL) {
             app_stream_loopback_print_status();
         }
+#endif
     }
 }
 
@@ -414,6 +417,33 @@ static void app_stream_loopback_print_status(void)
                               " ");
     UARTa_SendStringAndNumber("uf:",
                               codec_service_stream_get_underflow_count(),
+                              " ");
+    UARTa_SendStringAndNumber("ov_pcm:",
+                              codec_service_stream_get_pcm_overflow_count(),
+                              " ");
+    UARTa_SendStringAndNumber("ov_enc:",
+                              codec_service_stream_get_encoded_overflow_count(),
+                              " ");
+    UARTa_SendStringAndNumber("ov_play:",
+                              codec_service_stream_get_play_overflow_count(),
+                              " ");
+    UARTa_SendStringAndNumber("uf_pcm:",
+                              codec_service_stream_get_pcm_underflow_count(),
+                              " ");
+    UARTa_SendStringAndNumber("uf_enc:",
+                              codec_service_stream_get_encoded_underflow_count(),
+                              " ");
+    UARTa_SendStringAndNumber("uf_play:",
+                              codec_service_stream_get_play_underflow_count(),
+                              " ");
+    UARTa_SendStringAndNumber("max_pcm:",
+                              codec_service_stream_get_max_pcm_frame_count(),
+                              " ");
+    UARTa_SendStringAndNumber("max_enc:",
+                              codec_service_stream_get_max_encoded_frame_count(),
+                              " ");
+    UARTa_SendStringAndNumber("max_play:",
+                              codec_service_stream_get_max_play_frame_count(),
                               "\r\n");
 }
 

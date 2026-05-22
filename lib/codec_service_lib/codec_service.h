@@ -77,5 +77,14 @@ Uint32 codec_service_stream_get_encoded_frame_count(void);
 Uint32 codec_service_stream_get_play_frame_count(void);
 Uint32 codec_service_stream_get_overflow_count(void);
 Uint32 codec_service_stream_get_underflow_count(void);
+Uint32 codec_service_stream_get_pcm_overflow_count(void);
+Uint32 codec_service_stream_get_encoded_overflow_count(void);
+Uint32 codec_service_stream_get_play_overflow_count(void);
+Uint32 codec_service_stream_get_pcm_underflow_count(void);
+Uint32 codec_service_stream_get_encoded_underflow_count(void);
+Uint32 codec_service_stream_get_play_underflow_count(void);
+Uint32 codec_service_stream_get_max_pcm_frame_count(void);
+Uint32 codec_service_stream_get_max_encoded_frame_count(void);
+Uint32 codec_service_stream_get_max_play_frame_count(void);
 
 #endif /* CODEC_SERVICE_H_ */
