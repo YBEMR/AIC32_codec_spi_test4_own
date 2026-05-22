@@ -141,7 +141,7 @@ int16_t main(int16_t argc, char **argv)
     codec_service_reset();
 
     UARTa_SendString("AIC32 codec SPI own app ready.\r\n");
-
+    // 
     while (1) {
         if (stream_loopback_stop_pending != 0U) {
             stream_loopback_stop_pending = 0U;
