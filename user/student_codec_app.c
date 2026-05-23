@@ -22,7 +22,9 @@ typedef enum {
     APP_STATE_PLAY,
     APP_STATE_STREAM_LOOPBACK,
     APP_STATE_STREAM_SPI_TX,
-    APP_STATE_STREAM_SPI_RX_PLAY
+    APP_STATE_STREAM_SPI_RX_PLAY,
+    APP_STATE_FLOOR_REQUEST,
+    APP_STATE_FLOOR_WAIT_RESULT
 } app_state_t;
 
 static volatile app_state_t current_state = APP_STATE_IDLE;
@@ -37,6 +39,7 @@ static volatile Uint16 stream_spi_tx_start_pending = 0;
 static volatile Uint16 stream_spi_tx_stop_pending = 0;
 static volatile Uint16 stream_spi_rx_play_start_pending = 0;
 static volatile Uint16 stream_spi_rx_play_stop_pending = 0;
+static volatile Uint16 floor_request_start_pending = 0;
 static volatile Uint32 tick_count = 0;
 static volatile Uint16 mcbsp_word_phase = 0;
 static volatile Uint16 play_sample_hold = 0;
@@ -45,6 +48,8 @@ static Uint32 stream_loopback_frames = 0;
 static Uint16 stream_spi_tx_frame[CODEC_SERVICE_STREAM_FRAME_OCTETS];
 static Uint16 stream_spi_tx_packet[CODEC_SERVICE_STREAM_FRAME_OCTETS + 4U];
 static Uint16 stream_spi_rx_packet[CODEC_SERVICE_STREAM_FRAME_OCTETS + 4U];
+static Uint16 floor_tx_packet[CODEC_SERVICE_STREAM_FRAME_OCTETS + 4U];
+static Uint16 floor_rx_packet[CODEC_SERVICE_STREAM_FRAME_OCTETS + 4U];
 static Uint16 stream_spi_rx_play_tx_packet[CODEC_SERVICE_STREAM_FRAME_OCTETS + 4U];
 static Uint16 stream_spi_rx_play_frame[CODEC_SERVICE_STREAM_FRAME_OCTETS];
 static Uint32 stream_spi_rx_play_last_seq = 0;
@@ -68,6 +73,17 @@ static Uint32 stream_spi_tx_last_ready_wait_us = 0;
 static Uint32 stream_spi_tx_last_spi_us = 0;
 static Uint32 stream_spi_tx_last_interval_us = 0;
 static Uint16 stream_spi_tx_req_active = 0;
+static Uint32 floor_request_seq = 0;
+static Uint32 floor_last_request_seq = 0;
+static Uint32 floor_grant_count = 0;
+static Uint32 floor_deny_count = 0;
+static Uint32 floor_timeout_count = 0;
+static Uint32 floor_bad_ctrl_count = 0;
+static Uint32 floor_last_ready_wait_us = 0;
+static Uint32 floor_last_spi_us = 0;
+static Uint32 floor_wait_start_us = 0;
+static Uint32 floor_req_start_us = 0;
+static Uint16 floor_req_active = 0;
 
 #define KEY_DEBOUNCE_MS 260U
 #define APP_MONO_RECORD_WORD_SELECT 0U
@@ -78,10 +94,16 @@ static Uint16 stream_spi_tx_req_active = 0;
 #define APP_IDLE_TEST_MODE_SPI_RX_PLAY 2U
 #define APP_IDLE_TEST_MODE          APP_IDLE_TEST_MODE_SPI_RX_PLAY
 #define APP_STREAM_SPI_MAGIC        0x4711U
+#define APP_FLOOR_SPI_MAGIC         0xF100U
+#define APP_FLOOR_TYPE_REQUEST      1U
+#define APP_FLOOR_TYPE_GRANT        2U
+#define APP_FLOOR_TYPE_DENY         3U
+#define APP_FLOOR_TYPE_TIMEOUT      4U
 #define APP_STREAM_SPI_HEADER_WORDS  4U
 #define APP_STREAM_SPI_PACKET_WORDS  (APP_STREAM_SPI_HEADER_WORDS + \
                                       CODEC_SERVICE_STREAM_FRAME_OCTETS)
 #define APP_STREAM_SPI_READY_TIMEOUT_US 20000UL
+#define APP_FLOOR_TIMEOUT_US        1000000UL
 
 static void init_zone7(void);
 static Uint32 app_get_tick_count(void);
@@ -103,6 +125,14 @@ static void app_stream_spi_rx_play_start(void);
 static void app_stream_spi_rx_play_stop(void);
 static void app_stream_spi_rx_play_service(void);
 static void app_stream_spi_rx_play_print_status(void);
+static void app_floor_request_start(void);
+static void app_floor_request_service(void);
+static void app_floor_wait_result_service(void);
+static void app_floor_abort_to_idle(char *message);
+static void app_floor_print_status(void);
+static void app_floor_clear_packet(Uint16 *packet);
+static void app_floor_build_packet(Uint16 *packet, Uint16 type, Uint32 seq);
+static Uint16 app_floor_check_timeout(Uint32 start_us);
 static void delay(void);
 void Delay(int16_t time);
 
@@ -179,6 +209,11 @@ int16_t main(int16_t argc, char **argv)
             app_stream_spi_rx_play_stop();
         }
 
+        if (floor_request_start_pending != 0U) {
+            floor_request_start_pending = 0U;
+            app_floor_request_start();
+        }
+
         if (stream_loopback_start_pending != 0U) {
             stream_loopback_start_pending = 0U;
             app_stream_loopback_start();
@@ -206,6 +241,16 @@ int16_t main(int16_t argc, char **argv)
 
         if (current_state == APP_STATE_STREAM_SPI_RX_PLAY) {
             app_stream_spi_rx_play_service();
+            continue;
+        }
+
+        if (current_state == APP_STATE_FLOOR_REQUEST) {
+            app_floor_request_service();
+            continue;
+        }
+
+        if (current_state == APP_STATE_FLOOR_WAIT_RESULT) {
+            app_floor_wait_result_service();
             continue;
         }
 
@@ -339,7 +384,7 @@ interrupt void TIM0_IRQn(void)
             current_state = APP_STATE_DECODE;
         } else if (current_state == APP_STATE_IDLE) {
 #if APP_IDLE_TEST_MODE == APP_IDLE_TEST_MODE_SPI_TX
-            stream_spi_tx_start_pending = 1U;
+            floor_request_start_pending = 1U;
 #elif APP_IDLE_TEST_MODE == APP_IDLE_TEST_MODE_SPI_RX_PLAY
             stream_spi_rx_play_start_pending = 1U;
 #else
@@ -351,6 +396,13 @@ interrupt void TIM0_IRQn(void)
             stream_spi_tx_stop_pending = 1U;
         } else if (current_state == APP_STATE_STREAM_SPI_RX_PLAY) {
             stream_spi_rx_play_stop_pending = 1U;
+        } else if ((current_state == APP_STATE_FLOOR_REQUEST) ||
+                   (current_state == APP_STATE_FLOOR_WAIT_RESULT)) {
+            app_master_data_req_set(0U);
+            floor_req_active = 0U;
+            current_state = APP_STATE_IDLE;
+            UARTa_SendString("Floor request cancelled.\r\n");
+            app_floor_print_status();
         }
 
         key_decode_pressed_flag = 0;
@@ -417,6 +469,9 @@ interrupt void ISRMcbspSend(void)
             }
         }
         McbspaRegs.DXR1.all = play_sample_hold;
+    } else if ((current_state == APP_STATE_FLOOR_REQUEST) ||
+               (current_state == APP_STATE_FLOOR_WAIT_RESULT)) {
+        McbspaRegs.DXR1.all = 0U;
     } else if (current_state == APP_STATE_PLAY) {
         // 将单声道数据复制到左右声道输出，以实现单声道播放
         // 在相位0读一个样本，在相位1输出同一个样本
@@ -606,6 +661,197 @@ static void app_stream_spi_rx_play_stop(void)
     play_sample_hold = 0;
     UARTa_SendString("Stream SPI RX play stop.\r\n");
     app_stream_spi_rx_play_print_status();
+}
+
+static void app_floor_clear_packet(Uint16 *packet)
+{
+    Uint16 i;
+
+    for (i = 0U; i < APP_STREAM_SPI_PACKET_WORDS; i++) {
+        packet[i] = 0U;
+    }
+}
+
+static void app_floor_build_packet(Uint16 *packet, Uint16 type, Uint32 seq)
+{
+    app_floor_clear_packet(packet);
+    packet[0] = APP_FLOOR_SPI_MAGIC;
+    packet[1] = type;
+    packet[2] = (Uint16)(seq & 0xFFFFUL);
+    packet[3] = (Uint16)((seq >> 16) & 0xFFFFUL);
+}
+
+static Uint16 app_floor_check_timeout(Uint32 start_us)
+{
+    Uint32 now_us;
+
+    now_us = app_get_us();
+    return (app_elapsed_us(start_us, now_us) > APP_FLOOR_TIMEOUT_US) ?
+            1U : 0U;
+}
+
+static void app_floor_abort_to_idle(char *message)
+{
+    app_master_data_req_set(0U);
+    floor_req_active = 0U;
+    current_state = APP_STATE_IDLE;
+    UARTa_SendString(message);
+    app_floor_print_status();
+}
+
+static void app_floor_request_start(void)
+{
+    floor_last_request_seq = floor_request_seq++;
+    floor_req_active = 0U;
+    floor_req_start_us = 0UL;
+    floor_wait_start_us = 0UL;
+    floor_last_ready_wait_us = 0UL;
+    floor_last_spi_us = 0UL;
+    app_master_data_req_set(0U);
+    app_floor_build_packet(floor_tx_packet,
+                           APP_FLOOR_TYPE_REQUEST,
+                           floor_last_request_seq);
+    app_floor_clear_packet(floor_rx_packet);
+    current_state = APP_STATE_FLOOR_REQUEST;
+    UARTa_SendStringAndNumber("Floor request start seq:",
+                              (int32)floor_last_request_seq,
+                              "\r\n");
+}
+
+static void app_floor_request_service(void)
+{
+    Uint32 now_us;
+    Uint32 spi_start_us;
+    Uint32 spi_end_us;
+    Uint32 ready_wait_start_us;
+    Uint32 ready_wait_now_us;
+
+    if (floor_req_active == 0U) {
+        floor_req_active = 1U;
+        floor_req_start_us = app_get_us();
+        app_master_data_req_set(1U);
+    }
+
+    if (app_slave_spi_ready_is_active() == 0U) {
+        if (app_floor_check_timeout(floor_req_start_us) != 0U) {
+            floor_timeout_count++;
+            app_floor_abort_to_idle("Floor request timeout.\r\n");
+        }
+        return;
+    }
+
+    now_us = app_get_us();
+    floor_last_ready_wait_us = app_elapsed_us(floor_req_start_us, now_us);
+    app_master_data_req_set(0U);
+    floor_req_active = 0U;
+
+    spi_start_us = app_get_us();
+    spi_send_and_receive(floor_tx_packet,
+                         floor_rx_packet,
+                         APP_STREAM_SPI_PACKET_WORDS);
+    spi_end_us = app_get_us();
+    floor_last_spi_us = app_elapsed_us(spi_start_us, spi_end_us);
+
+    ready_wait_start_us = app_get_us();
+    while (app_slave_spi_ready_is_active() != 0U) {
+        ready_wait_now_us = app_get_us();
+        if (app_elapsed_us(ready_wait_start_us,
+                           ready_wait_now_us) > APP_STREAM_SPI_READY_TIMEOUT_US) {
+            floor_timeout_count++;
+            app_floor_abort_to_idle("Floor request ready release timeout.\r\n");
+            return;
+        }
+    }
+
+    floor_wait_start_us = app_get_us();
+    current_state = APP_STATE_FLOOR_WAIT_RESULT;
+    UARTa_SendString("Floor request sent, waiting result.\r\n");
+}
+
+static void app_floor_wait_result_service(void)
+{
+    Uint16 type;
+    Uint32 seq;
+    Uint32 now_us;
+    Uint32 spi_start_us;
+    Uint32 spi_end_us;
+    Uint32 ready_wait_start_us;
+    Uint32 ready_wait_now_us;
+
+    if (app_slave_data_ready_is_active() == 0U) {
+        if (app_floor_check_timeout(floor_wait_start_us) != 0U) {
+            floor_timeout_count++;
+            app_floor_abort_to_idle("Floor result timeout.\r\n");
+        }
+        return;
+    }
+
+    if (floor_req_active == 0U) {
+        floor_req_active = 1U;
+        floor_req_start_us = app_get_us();
+        app_master_data_req_set(1U);
+    }
+
+    if (app_slave_spi_ready_is_active() == 0U) {
+        if (app_floor_check_timeout(floor_req_start_us) != 0U) {
+            floor_timeout_count++;
+            app_floor_abort_to_idle("Floor result SPI ready timeout.\r\n");
+        }
+        return;
+    }
+
+    now_us = app_get_us();
+    floor_last_ready_wait_us = app_elapsed_us(floor_req_start_us, now_us);
+    app_master_data_req_set(0U);
+    floor_req_active = 0U;
+
+    app_floor_clear_packet(floor_tx_packet);
+    app_floor_clear_packet(floor_rx_packet);
+    spi_start_us = app_get_us();
+    spi_send_and_receive(floor_tx_packet,
+                         floor_rx_packet,
+                         APP_STREAM_SPI_PACKET_WORDS);
+    spi_end_us = app_get_us();
+    floor_last_spi_us = app_elapsed_us(spi_start_us, spi_end_us);
+
+    ready_wait_start_us = app_get_us();
+    while (app_slave_spi_ready_is_active() != 0U) {
+        ready_wait_now_us = app_get_us();
+        if (app_elapsed_us(ready_wait_start_us,
+                           ready_wait_now_us) > APP_STREAM_SPI_READY_TIMEOUT_US) {
+            floor_timeout_count++;
+            app_floor_abort_to_idle("Floor result ready release timeout.\r\n");
+            return;
+        }
+    }
+
+    if (floor_rx_packet[0] != APP_FLOOR_SPI_MAGIC) {
+        floor_bad_ctrl_count++;
+        app_floor_abort_to_idle("Floor bad control magic.\r\n");
+        return;
+    }
+
+    type = floor_rx_packet[1];
+    seq = ((Uint32)floor_rx_packet[3] << 16) |
+          (Uint32)floor_rx_packet[2];
+    if (seq != floor_last_request_seq) {
+        floor_bad_ctrl_count++;
+        app_floor_abort_to_idle("Floor bad control seq.\r\n");
+        return;
+    }
+
+    if (type == APP_FLOOR_TYPE_GRANT) {
+        floor_grant_count++;
+        UARTa_SendString("Floor grant.\r\n");
+        app_floor_print_status();
+        app_stream_spi_tx_start();
+    } else if (type == APP_FLOOR_TYPE_DENY) {
+        floor_deny_count++;
+        app_floor_abort_to_idle("Floor deny.\r\n");
+    } else {
+        floor_timeout_count++;
+        app_floor_abort_to_idle("Floor server timeout/error.\r\n");
+    }
 }
 
 static void app_stream_spi_tx_service(void)
@@ -943,6 +1189,31 @@ static void app_stream_spi_rx_play_print_status(void)
                               " ");
     UARTa_SendStringAndNumber("fail:",
                               (int32)stream_spi_rx_play_fail_count,
+                              "\r\n");
+}
+
+static void app_floor_print_status(void)
+{
+    UARTa_SendStringAndNumber("FLOOR seq:",
+                              (int32)floor_last_request_seq,
+                              " ");
+    UARTa_SendStringAndNumber("grant:",
+                              (int32)floor_grant_count,
+                              " ");
+    UARTa_SendStringAndNumber("deny:",
+                              (int32)floor_deny_count,
+                              " ");
+    UARTa_SendStringAndNumber("timeout:",
+                              (int32)floor_timeout_count,
+                              " ");
+    UARTa_SendStringAndNumber("bad:",
+                              (int32)floor_bad_ctrl_count,
+                              " ");
+    UARTa_SendStringAndNumber("rw_us:",
+                              (int32)floor_last_ready_wait_us,
+                              " ");
+    UARTa_SendStringAndNumber("spi_us:",
+                              (int32)floor_last_spi_us,
                               "\r\n");
 }
 

@@ -102,3 +102,13 @@ student_release/lib
 
 ## 6. 下载程序
 python .\read_data1.py -p COM16 -w .\build\debug\AIC32_codec_spi_test4_own.txt
+
+## 7. G.711 Stream 测试模式
+
+`user/student_codec_app.c` 中的 `APP_IDLE_TEST_MODE` 用于选择测试按键在空闲状态下启动的模式：
+
+- `APP_IDLE_TEST_MODE_SPI_TX`：设备 1 上行。按键后先发送 `FLOOR_REQUEST`，收到 MCU/server 返回的 `FLOOR_GRANT` 后才开始采集、G.711 编码和 SPI 上行。
+- `APP_IDLE_TEST_MODE_SPI_RX_PLAY`：设备 2 下行播放。按键后从 MCU 读取 server 转发来的 G.711 帧并解码播放。
+- `APP_IDLE_TEST_MODE_LOOPBACK`：DSP 本地 G.711 流式回环测试。
+
+第一版话权申请只保护 `SPI_TX` 上行模式；`DENY` 或超时会打印统计并回到 `IDLE`。
