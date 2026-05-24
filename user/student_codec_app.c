@@ -92,7 +92,8 @@ static Uint16 floor_req_active = 0;
 #define APP_IDLE_TEST_MODE_LOOPBACK 0U
 #define APP_IDLE_TEST_MODE_SPI_TX   1U
 #define APP_IDLE_TEST_MODE_SPI_RX_PLAY 2U
-#define APP_IDLE_TEST_MODE          APP_IDLE_TEST_MODE_SPI_RX_PLAY
+#define APP_IDLE_TEST_MODE_FLOOR_PTT 3U
+#define APP_IDLE_TEST_MODE          APP_IDLE_TEST_MODE_FLOOR_PTT
 #define APP_STREAM_SPI_MAGIC        0x4711U
 #define APP_FLOOR_SPI_MAGIC         0xF100U
 #define APP_FLOOR_TYPE_REQUEST      1U
@@ -384,9 +385,11 @@ interrupt void TIM0_IRQn(void)
             current_state = APP_STATE_DECODE;
         } else if (current_state == APP_STATE_IDLE) {
 #if APP_IDLE_TEST_MODE == APP_IDLE_TEST_MODE_SPI_TX
-            floor_request_start_pending = 1U;
+            stream_spi_tx_start_pending = 1U;
 #elif APP_IDLE_TEST_MODE == APP_IDLE_TEST_MODE_SPI_RX_PLAY
             stream_spi_rx_play_start_pending = 1U;
+#elif APP_IDLE_TEST_MODE == APP_IDLE_TEST_MODE_FLOOR_PTT
+            floor_request_start_pending = 1U;
 #else
             stream_loopback_start_pending = 1U;
 #endif
@@ -422,7 +425,6 @@ interrupt void TIM0_IRQn(void)
 
 interrupt void SPI_READY_IRQn(void)
 {
-    UARTa_SendString("nnnnnnnnnnnnnnnnn\r\n");
     spi_ready_flag = 1;
     PieCtrlRegs.PIEACK.bit.ACK12 = 1;
 }
@@ -618,6 +620,7 @@ static void app_stream_spi_tx_stop(void)
     codec_service_stream_stop_capture();
     app_master_data_req_set(0U);
     stream_spi_tx_req_active = 0;
+    /* TODO: Send FLOOR_RELEASE here when explicit floor release is added. */
     current_state = APP_STATE_IDLE;
     mcbsp_word_phase = 0;
     play_sample_hold = 0;
