@@ -126,6 +126,10 @@ static void app_stream_spi_rx_play_start(void);
 static void app_stream_spi_rx_play_stop(void);
 static void app_stream_spi_rx_play_service(void);
 static void app_stream_spi_rx_play_print_status(void);
+static void app_downlink_voice_reset(Uint16 reset_codec);
+static void app_downlink_voice_service(void);
+static Uint16 app_downlink_voice_packet_is_idle(const Uint16 *packet);
+static void app_downlink_voice_handle_packet(void);
 static void app_floor_request_start(void);
 static void app_floor_request_service(void);
 static void app_floor_wait_result_service(void);
@@ -191,6 +195,7 @@ int16_t main(int16_t argc, char **argv)
     init_zone7();
     audio_set_tick_getter(app_get_tick_count);
     codec_service_reset();
+    app_downlink_voice_reset(1U);
 
     UARTa_SendString("AIC32 codec SPI own app ready.\r\n");
     // 
@@ -235,6 +240,16 @@ int16_t main(int16_t argc, char **argv)
             continue;
         }
 
+        if (current_state == APP_STATE_FLOOR_REQUEST) {
+            app_floor_request_service();
+            continue;
+        }
+
+        if (current_state == APP_STATE_FLOOR_WAIT_RESULT) {
+            app_floor_wait_result_service();
+            continue;
+        }
+
         if (current_state == APP_STATE_STREAM_SPI_TX) {
             app_stream_spi_tx_service();
             continue;
@@ -245,13 +260,8 @@ int16_t main(int16_t argc, char **argv)
             continue;
         }
 
-        if (current_state == APP_STATE_FLOOR_REQUEST) {
-            app_floor_request_service();
-            continue;
-        }
-
-        if (current_state == APP_STATE_FLOOR_WAIT_RESULT) {
-            app_floor_wait_result_service();
+        if (current_state == APP_STATE_IDLE) {
+            app_downlink_voice_service();
             continue;
         }
 
@@ -461,7 +471,8 @@ interrupt void ISRMcbspSend(void)
             codec_service_stream_record_sample(temp);
         }
         McbspaRegs.DXR1.all = temp;
-    } else if (current_state == APP_STATE_STREAM_SPI_RX_PLAY) {
+    } else if ((current_state == APP_STATE_STREAM_SPI_RX_PLAY) ||
+               (current_state == APP_STATE_IDLE)) {
         if (word_phase == 0U) {
             if (codec_service_stream_get_play_sample(&sample) ==
                     CODEC_SERVICE_OK) {
@@ -479,7 +490,6 @@ interrupt void ISRMcbspSend(void)
         // 在相位0读一个样本，在相位1输出同一个样本
         if (word_phase == 0U) {
             if (codec_service_get_play_sample(&sample) == CODEC_SERVICE_PLAY_DONE) {
-                UARTa_SendString("Play complete.\r\n");
                 current_state = APP_STATE_IDLE;
                 play_sample_hold = 0;
                 mcbsp_word_phase = 0;
@@ -626,31 +636,12 @@ static void app_stream_spi_tx_stop(void)
     play_sample_hold = 0;
     UARTa_SendString("Stream SPI TX stop.\r\n");
     app_stream_spi_tx_print_status();
+    app_downlink_voice_reset(1U);
 }
 
 static void app_stream_spi_rx_play_start(void)
 {
-    Uint16 i;
-
-    codec_service_stream_reset();
-    mcbsp_word_phase = 0;
-    play_sample_hold = 0;
-    stream_spi_rx_play_last_seq = 0;
-    stream_spi_rx_play_frames = 0;
-    stream_spi_rx_play_bad_magic = 0;
-    stream_spi_rx_play_bad_len = 0;
-    stream_spi_rx_play_gap = 0;
-    stream_spi_rx_play_fail_count = 0;
-    stream_spi_rx_play_last_ready_wait_us = 0;
-    stream_spi_rx_play_last_spi_us = 0;
-    stream_spi_rx_play_have_seq = 0;
-    stream_spi_rx_play_req_active = 0;
-    stream_spi_rx_play_req_start_us = 0;
-    for (i = 0U; i < APP_STREAM_SPI_PACKET_WORDS; i++) {
-        stream_spi_rx_play_tx_packet[i] = 0U;
-        stream_spi_rx_packet[i] = 0U;
-    }
-    app_master_data_req_set(0U);
+    app_downlink_voice_reset(1U);
     current_state = APP_STATE_STREAM_SPI_RX_PLAY;
     UARTa_SendString("Stream SPI RX play start.\r\n");
 }
@@ -664,6 +655,36 @@ static void app_stream_spi_rx_play_stop(void)
     play_sample_hold = 0;
     UARTa_SendString("Stream SPI RX play stop.\r\n");
     app_stream_spi_rx_play_print_status();
+}
+
+static void app_downlink_voice_reset(Uint16 reset_codec)
+{
+    Uint16 i;
+
+    if (reset_codec != 0U) {
+        codec_service_stream_reset();
+    }
+
+    mcbsp_word_phase = 0;
+    play_sample_hold = 0;
+    stream_spi_rx_play_last_seq = 0;
+    stream_spi_rx_play_frames = 0;
+    stream_spi_rx_play_bad_magic = 0;
+    stream_spi_rx_play_bad_len = 0;
+    stream_spi_rx_play_gap = 0;
+    stream_spi_rx_play_fail_count = 0;
+    stream_spi_rx_play_last_ready_wait_us = 0;
+    stream_spi_rx_play_last_spi_us = 0;
+    stream_spi_rx_play_have_seq = 0;
+    stream_spi_rx_play_req_active = 0;
+    stream_spi_rx_play_req_start_us = 0;
+
+    for (i = 0U; i < APP_STREAM_SPI_PACKET_WORDS; i++) {
+        stream_spi_rx_play_tx_packet[i] = 0U;
+        stream_spi_rx_packet[i] = 0U;
+    }
+
+    app_master_data_req_set(0U);
 }
 
 static void app_floor_clear_packet(Uint16 *packet)
@@ -948,10 +969,11 @@ static void app_stream_spi_tx_service(void)
 
 static void app_stream_spi_rx_play_service(void)
 {
-    Uint16 i;
-    Uint16 magic;
-    Uint16 payload_words;
-    Uint32 seq;
+    app_downlink_voice_service();
+}
+
+static void app_downlink_voice_service(void)
+{
     Uint32 now_us;
     Uint32 spi_start_us;
     Uint32 spi_end_us;
@@ -1004,21 +1026,51 @@ static void app_stream_spi_rx_play_service(void)
         }
     }
 
+    app_downlink_voice_handle_packet();
+}
+
+static Uint16 app_downlink_voice_packet_is_idle(const Uint16 *packet)
+{
+    Uint16 i;
+
+    for (i = 0U; i < APP_STREAM_SPI_PACKET_WORDS; i++) {
+        if (packet[i] != 0U) {
+            return 0U;
+        }
+    }
+
+    return 1U;
+}
+
+static void app_downlink_voice_handle_packet(void)
+{
+    Uint16 i;
+    Uint16 magic;
+    Uint16 payload_words;
+    Uint32 seq;
+
+    if (app_downlink_voice_packet_is_idle(stream_spi_rx_packet) != 0U) {
+        return;
+    }
+
     magic = stream_spi_rx_packet[0];
-    payload_words = stream_spi_rx_packet[3];
-    seq = ((Uint32)stream_spi_rx_packet[2] << 16) |
-          (Uint32)stream_spi_rx_packet[1];
+    if (magic == APP_FLOOR_SPI_MAGIC) {
+        return;
+    }
 
     if (magic != APP_STREAM_SPI_MAGIC) {
         stream_spi_rx_play_bad_magic++;
         return;
     }
 
+    payload_words = stream_spi_rx_packet[3];
     if (payload_words != CODEC_SERVICE_STREAM_FRAME_OCTETS) {
         stream_spi_rx_play_bad_len++;
         return;
     }
 
+    seq = ((Uint32)stream_spi_rx_packet[2] << 16) |
+          (Uint32)stream_spi_rx_packet[1];
     if ((stream_spi_rx_play_have_seq != 0U) &&
         (seq != (stream_spi_rx_play_last_seq + 1UL))) {
         stream_spi_rx_play_gap++;
