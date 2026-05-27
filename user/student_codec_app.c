@@ -72,6 +72,7 @@ static Uint32 stream_spi_tx_last_send_us = 0;
 static Uint32 stream_spi_tx_last_ready_wait_us = 0;
 static Uint32 stream_spi_tx_last_spi_us = 0;
 static Uint32 stream_spi_tx_last_interval_us = 0;
+/* SPI 发送侧请求状态：1 表示已向从机发起发送请求，正在等待从机 SPI ready。 */
 static Uint16 stream_spi_tx_req_active = 0;
 static Uint32 floor_request_seq = 0;
 static Uint32 floor_last_request_seq = 0;
@@ -100,6 +101,7 @@ static Uint16 floor_req_active = 0;
 #define APP_FLOOR_TYPE_GRANT        2U
 #define APP_FLOOR_TYPE_DENY         3U
 #define APP_FLOOR_TYPE_TIMEOUT      4U
+/* SPI 帧按 16 位 word 数组传输，固定下标定义头部，避免 DSP/MCU 结构体对齐和大小端差异。 */
 #define APP_STREAM_SPI_HEADER_WORDS  4U
 #define APP_STREAM_SPI_PACKET_WORDS  (APP_STREAM_SPI_HEADER_WORDS + \
                                       CODEC_SERVICE_STREAM_FRAME_OCTETS)
@@ -215,6 +217,7 @@ int16_t main(int16_t argc, char **argv)
             app_stream_spi_rx_play_stop();
         }
 
+        // 初始化以及填充话权申请包
         if (floor_request_start_pending != 0U) {
             floor_request_start_pending = 0U;
             app_floor_request_start();
@@ -245,6 +248,8 @@ int16_t main(int16_t argc, char **argv)
             continue;
         }
 
+        // 如果在这段时间按下按键会怎样
+        // 会取消申请并清除相关的状态
         if (current_state == APP_STATE_FLOOR_WAIT_RESULT) {
             app_floor_wait_result_service();
             continue;
@@ -399,6 +404,7 @@ interrupt void TIM0_IRQn(void)
 #elif APP_IDLE_TEST_MODE == APP_IDLE_TEST_MODE_SPI_RX_PLAY
             stream_spi_rx_play_start_pending = 1U;
 #elif APP_IDLE_TEST_MODE == APP_IDLE_TEST_MODE_FLOOR_PTT
+            /* 空闲状态下按功能键才会发起话权申请；此时主循环会暂停普通下行拉流，转入话权握手。 */
             floor_request_start_pending = 1U;
 #else
             stream_loopback_start_pending = 1U;
@@ -408,6 +414,7 @@ interrupt void TIM0_IRQn(void)
         } else if (current_state == APP_STATE_STREAM_SPI_TX) {
             stream_spi_tx_stop_pending = 1U;
         } else if (current_state == APP_STATE_STREAM_SPI_RX_PLAY) {
+            /* 显式接收播放状态下按功能键只停止接收播放，不会直接发起话权申请。 */
             stream_spi_rx_play_stop_pending = 1U;
         } else if ((current_state == APP_STATE_FLOOR_REQUEST) ||
                    (current_state == APP_STATE_FLOOR_WAIT_RESULT)) {
@@ -484,6 +491,7 @@ interrupt void ISRMcbspSend(void)
         McbspaRegs.DXR1.all = play_sample_hold;
     } else if ((current_state == APP_STATE_FLOOR_REQUEST) ||
                (current_state == APP_STATE_FLOOR_WAIT_RESULT)) {
+        /* 话权申请握手期间不播放下行语音，先输出静音，避免语音包和控制包共用 SPI 时互相抢占。 */
         McbspaRegs.DXR1.all = 0U;
     } else if (current_state == APP_STATE_PLAY) {
         // 将单声道数据复制到左右声道输出，以实现单声道播放
@@ -750,12 +758,13 @@ static void app_floor_request_service(void)
     Uint32 ready_wait_start_us;
     Uint32 ready_wait_now_us;
 
+    // 只执行一次
     if (floor_req_active == 0U) {
         floor_req_active = 1U;
         floor_req_start_us = app_get_us();
         app_master_data_req_set(1U);
     }
-
+    // 非阻塞等待
     if (app_slave_spi_ready_is_active() == 0U) {
         if (app_floor_check_timeout(floor_req_start_us) != 0U) {
             floor_timeout_count++;
@@ -802,6 +811,7 @@ static void app_floor_wait_result_service(void)
     Uint32 ready_wait_start_us;
     Uint32 ready_wait_now_us;
 
+    // 等待MCU返回话权申请结果
     if (app_slave_data_ready_is_active() == 0U) {
         if (app_floor_check_timeout(floor_wait_start_us) != 0U) {
             floor_timeout_count++;
@@ -839,6 +849,7 @@ static void app_floor_wait_result_service(void)
     floor_last_spi_us = app_elapsed_us(spi_start_us, spi_end_us);
 
     ready_wait_start_us = app_get_us();
+    // 等待从机释放 spi_ready，以此确认上一轮通信已经结束
     while (app_slave_spi_ready_is_active() != 0U) {
         ready_wait_now_us = app_get_us();
         if (app_elapsed_us(ready_wait_start_us,
@@ -868,6 +879,7 @@ static void app_floor_wait_result_service(void)
         floor_grant_count++;
         UARTa_SendString("Floor grant.\r\n");
         app_floor_print_status();
+        // 初始化并置位APP_STATE_STREAM_SPI_TX状态
         app_stream_spi_tx_start();
     } else if (type == APP_FLOOR_TYPE_DENY) {
         floor_deny_count++;
@@ -888,28 +900,35 @@ static void app_stream_spi_tx_service(void)
     Uint32 ready_wait_start_us;
     Uint32 ready_wait_now_us;
 
+    // PCM队列
     while (codec_service_stream_has_pcm_frame() != 0U) {
         if (codec_service_stream_process_encode() != CODEC_SERVICE_OK) {
             break;
         }
     }
 
+    // 编码队列
     if (codec_service_stream_has_encoded_frame() == 0U) {
         app_master_data_req_set(0U);
+        /* 没有待发送编码帧时，撤销主机请求并清除等待从机 ready 的状态。 */
         stream_spi_tx_req_active = 0;
         return;
     }
 
+    /* 正常半双工 TX 期间一般不应收到下行 data_ready；若出现则只做诊断计数，不影响本次发送。 */
     if (app_slave_data_ready_is_active() != 0U) {
         stream_spi_tx_data_ready_active_count++;
     }
 
+    // 防止在等待从机spi_ready信号期间重复设置req信号
     if (stream_spi_tx_req_active == 0U) {
+        /* 本轮首次发现有编码帧可发，拉起请求信号，并记录等待起点。 */
         stream_spi_tx_req_active = 1U;
         stream_spi_tx_req_start_us = app_get_us();
         app_master_data_req_set(1U);
     }
 
+    // 非阻塞等待
     if (app_slave_spi_ready_is_active() == 0U) {
         return;
     }
@@ -918,6 +937,7 @@ static void app_stream_spi_tx_service(void)
     stream_spi_tx_last_ready_wait_us =
             app_elapsed_us(stream_spi_tx_req_start_us, now_us);
     app_master_data_req_set(0U);
+    /* 从机已 ready，可以开始 SPI 传输，本次请求状态结束。 */
     stream_spi_tx_req_active = 0;
 
     if (codec_service_stream_get_encoded_frame(stream_spi_tx_frame,
@@ -980,6 +1000,7 @@ static void app_downlink_voice_service(void)
     Uint32 ready_wait_start_us;
     Uint32 ready_wait_now_us;
 
+    /* 播放缓冲区已满时，停止向从机请求新的下行语音数据，避免溢出。 */
     if (codec_service_stream_get_play_frame_count() >=
             CODEC_SERVICE_STREAM_PLAY_FRAME_CAPACITY) {
         app_master_data_req_set(0U);
@@ -987,28 +1008,33 @@ static void app_downlink_voice_service(void)
         return;
     }
 
+    /* 从机没有准备好下行数据时，清除本次请求状态并退出。 */
     if (app_slave_data_ready_is_active() == 0U) {
         app_master_data_req_set(0U);
         stream_spi_rx_play_req_active = 0;
         return;
     }
 
+    /* 首次发现从机有数据时，拉高主机请求信号，并记录开始等待的时间。 */
     if (stream_spi_rx_play_req_active == 0U) {
         stream_spi_rx_play_req_active = 1U;
         stream_spi_rx_play_req_start_us = app_get_us();
         app_master_data_req_set(1U);
     }
 
+    /* 等待从机拉起 SPI ready；未就绪时本轮不阻塞，等下次调度再检查。 */
     if (app_slave_spi_ready_is_active() == 0U) {
         return;
     }
 
+    /* 从机已就绪，统计从发起请求到 ready 的等待时间，并撤销请求信号。 */
     now_us = app_get_us();
     stream_spi_rx_play_last_ready_wait_us =
             app_elapsed_us(stream_spi_rx_play_req_start_us, now_us);
     app_master_data_req_set(0U);
     stream_spi_rx_play_req_active = 0;
 
+    /* 通过 SPI 全双工收取一包下行语音数据，同时记录本次 SPI 传输耗时。 */
     spi_start_us = app_get_us();
     spi_send_and_receive(stream_spi_rx_play_tx_packet,
                          stream_spi_rx_packet,
@@ -1016,6 +1042,7 @@ static void app_downlink_voice_service(void)
     spi_end_us = app_get_us();
     stream_spi_rx_play_last_spi_us = app_elapsed_us(spi_start_us, spi_end_us);
 
+    /* 等待从机释放 SPI ready，确保下一轮不会误把上一轮 ready 高电平当成新一次就绪。 */
     ready_wait_start_us = app_get_us();
     while (app_slave_spi_ready_is_active() != 0U) {
         ready_wait_now_us = app_get_us();
@@ -1026,6 +1053,7 @@ static void app_downlink_voice_service(void)
         }
     }
 
+    /* 解析刚收到的 SPI 包，并把有效语音帧送入播放流。 */
     app_downlink_voice_handle_packet();
 }
 
