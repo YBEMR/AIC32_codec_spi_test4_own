@@ -3,6 +3,12 @@
 #include "spi.h"
 #include <string.h>
 
+/*
+ * PTT SPI wire protocol 说明见 docs/ptt_protocol.md。
+ * 本文件中的 CODEC_SERVICE_PTT_SPI_BLOCK_* 是 Art-Pi applications/ptt_protocol.h
+ * 中 PTT_SPI_BLOCK_* 的 DSP 侧镜像；协议数值和字段布局不得单边修改。
+ */
+
 #pragma DATA_SECTION(ptt_spi_tx_words, "ZONE7DATA");
 static Uint16 ptt_spi_tx_words[CODEC_SERVICE_SPI_PACKET_SIZE];
 
