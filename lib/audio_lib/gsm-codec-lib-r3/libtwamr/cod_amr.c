@@ -43,6 +43,7 @@
 #include "ton_stab.h"
 #include "vad.h"
 #include "dtx_enc.h"
+#include "amr_profile.h"
 
 /*
 *****************************************************************************
@@ -248,6 +249,7 @@ int cod_amr(
    Word16 T_op[L_FRAME/L_FRAME_BY2];
    Word16 T0, T0_frac;
    Word16 gain_pit, gain_code;
+   amr_prof_tick_t prof_start;
 
    /* Flags */
    Word16 lsp_flag = 0;        /* indicates resonance in LPC filter */   
@@ -291,6 +293,8 @@ int cod_amr(
     *         subframes (both quantized and unquantized)                     *
     *------------------------------------------------------------------------*/
    
+   prof_start = amr_prof_start();
+
    /* LP analysis */
    lpc(&st->lpcSt, mode, st->p_window, st->p_window_12k2, A_t);
 
@@ -331,6 +335,7 @@ int cod_amr(
        /* check resonance in the filter */
       lsp_flag = check_lsp(&st->tonStabSt, st->lspSt.lsp_old);
    }
+   amr_prof_add(AMR_PROF_LPC_LSP, prof_start);
    
    /*----------------------------------------------------------------------*
     * - Find the weighted input speech w_sp[] for the whole speech frame   *
@@ -338,6 +343,8 @@ int cod_amr(
     * - Set the range for searching closed-loop pitch in 1st subframe      *
     * - Find the open-loop pitch delay for last 2 subframes                *
     *----------------------------------------------------------------------*/
+
+   prof_start = amr_prof_start();
 
    if (st->dtx && st->vadSt.use_vad2)
    {  /* no test() call since this if is only in simulation env */
@@ -382,6 +389,7 @@ int cod_amr(
    {  /* no test() call since this if is only in simulation env */
       vad_pitch_detection(&st->vadSt.u.v1, T_op);
    } 
+   amr_prof_add(AMR_PROF_OPEN_LOOP, prof_start);
 
    if (sub(*usedMode, MRDTX) == 0)
    {
@@ -431,6 +439,7 @@ int cod_amr(
       /*-----------------------------------------------------------------*
        * - Preprocessing of subframe                                     *
        *-----------------------------------------------------------------*/
+      prof_start = amr_prof_start();
       if (sub(*usedMode, MR475) != 0)
       {
          subframePreProc(*usedMode, gamma1, gamma1_12k2,
@@ -453,6 +462,7 @@ int cod_amr(
              Copy (st->h1, h1_sf0, L_SUBFR);
          }
       }
+      amr_prof_add(AMR_PROF_SF_PRE, prof_start);
       
       /* copy the LP residual (res2 is modified in the CL LTP search)    */
       Copy (res, res2, L_SUBFR);
@@ -460,10 +470,12 @@ int cod_amr(
       /*-----------------------------------------------------------------*
        * - Closed-loop LTP search                                        *
        *-----------------------------------------------------------------*/
+      prof_start = amr_prof_start();
       cl_ltp(&st->clLtpSt, &st->tonStabSt, *usedMode, i_subfr, T_op, st->h1, 
              &st->exc[i_subfr], res2, xn, lsp_flag, xn2, y1, 
              &T0, &T0_frac, &gain_pit, gCoeff, &ana,
              &gp_limit);
+      amr_prof_add(AMR_PROF_CL_LTP, prof_start);
 
       /* update LTP lag history */
       if ((subfrNr == 0) && (st->ol_gain_flg[0] > 0))
@@ -479,12 +491,15 @@ int cod_amr(
       /*-----------------------------------------------------------------*
        * - Inovative codebook search (find index and gain)               *
        *-----------------------------------------------------------------*/
+      prof_start = amr_prof_start();
       cbsearch(xn2, st->h1, T0, st->sharp, gain_pit, res2, 
                code, y2, &ana, *usedMode, subfrNr);
+      amr_prof_add(AMR_PROF_CBSEARCH, prof_start);
 
       /*------------------------------------------------------*
        * - Quantization of gains.                             *
        *------------------------------------------------------*/
+      prof_start = amr_prof_start();
       gainQuant(&st->gainQuantSt, *usedMode, res, &st->exc[i_subfr], code,
                 xn, xn2,  y1, y2, gCoeff, evenSubfr, gp_limit,
                 &gain_pit_sf0, &gain_code_sf0,
@@ -492,7 +507,9 @@ int cod_amr(
 
       /* update gain history */
       update_gp_clipping(&st->tonStabSt, gain_pit);
+      amr_prof_add(AMR_PROF_GAIN, prof_start);
 
+      prof_start = amr_prof_start();
       if (sub(*usedMode, MR475) != 0)
       {
          /* Subframe Post Porcessing */
@@ -556,21 +573,26 @@ int cod_amr(
                              st->exc, &st->sharp);
          }
       }      
+      amr_prof_add(AMR_PROF_SF_POST, prof_start);
                
       A += MP1;    /* interpolated LPC parameters for next subframe */
       Aq += MP1;
    }
 
+   prof_start = amr_prof_start();
    Copy(&st->old_exc[L_FRAME], &st->old_exc[0], PIT_MAX + L_INTERPOL);
+   amr_prof_add(AMR_PROF_TAIL, prof_start);
    
 the_end:
    
    /*--------------------------------------------------*
     * Update signal for next frame.                    *
     *--------------------------------------------------*/
+   prof_start = amr_prof_start();
    Copy(&st->old_wsp[L_FRAME], &st->old_wsp[0], PIT_MAX);
    
    Copy(&st->old_speech[L_FRAME], &st->old_speech[0], L_TOTAL - L_FRAME);
+   amr_prof_add(AMR_PROF_TAIL, prof_start);
 
    return 0;
 }

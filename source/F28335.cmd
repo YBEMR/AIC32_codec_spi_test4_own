@@ -137,8 +137,63 @@ SECTIONS
    ramfuncs            :
                          {
                             *(ramfuncs)
-                            /* Keep cod_amr core in RAML0 ramfuncs. */
-                            audio_lib.lib<cod_amr.obj>(.text)
+                            /*
+                             * MR515 encode hot path experiment groups.
+                             * Keep cod_amr.obj in Flash because it mostly dispatches work.
+                             *
+                             * Active experiment: Open-loop pitch group.
+                             * Profiling after LTP-A showed open_loop was the largest
+                             * stage, about 14 ms/frame, so this replaces LTP-A in RAML0.
+                            */
+                            audio_lib.lib<pitch_ol.obj>(.text)
+                            audio_lib.lib<hp_max.obj>(.text)
+                            audio_lib.lib<ol_ltp.obj>(.text)
+                            audio_lib.lib<pre_big.obj>(.text)
+                            /*
+                             * p_ol_wgh.obj is part of the open-loop family but
+                             * does not fit with pitch_ol + hp_max in RAML0.
+                             *
+                             * audio_lib.lib<p_ol_wgh.obj>(.text)
+                             */
+
+                            /*
+                             * LTP-A: closed-loop pitch search baseline.
+                             * Best measured so far: about 50 ms/frame.
+                             *
+                             * audio_lib.lib<pitch_fr.obj>(.text)
+                             * audio_lib.lib<cl_ltp.obj>(.text)
+                             * audio_lib.lib<pred_lt.obj>(.text)
+                             * audio_lib.lib<convolve.obj>(.text)
+                             */
+
+                            /*
+                             * LTP-B: replace pitch_fr with pitch gain math.
+                             *
+                             * audio_lib.lib<g_pitch.obj>(.text)
+                             * audio_lib.lib<cl_ltp.obj>(.text)
+                             * audio_lib.lib<pred_lt.obj>(.text)
+                             * audio_lib.lib<convolve.obj>(.text)
+                             */
+
+                            /*
+                             * Codebook group: fixed codebook correlation/sign search.
+                             * This measured about 53 ms/frame when tested alone.
+                             *
+                             * audio_lib.lib<cor_h.obj>(.text)
+                             * audio_lib.lib<set_sign.obj>(.text)
+                             */
+
+                            /*
+                             * Gain group: gain quantization plus compact LTP helpers.
+                             * This group is designed to fit RAML0 by keeping pitch_fr
+                             * in Flash and retaining the smaller LTP helpers.
+                             *
+                             * audio_lib.lib<gain_q.obj>(.text)
+                             * audio_lib.lib<qua_gain.obj>(.text)
+                             * audio_lib.lib<cl_ltp.obj>(.text)
+                             * audio_lib.lib<pred_lt.obj>(.text)
+                             * audio_lib.lib<convolve.obj>(.text)
+                             */
                          } LOAD = FLASHD,
                            RUN = RAML0,
                            LOAD_START(_RamfuncsLoadStart),
@@ -148,14 +203,17 @@ SECTIONS
 
    amrfastcode         :
                          {
+                           /*
+                            * External RAM is used only for cold or non-MR515 code.
+                            * Do not place the current MR515 hot path here because it
+                            * contends with ZONE7DATA on the XINTF bus.
+                            */
                            audio_lib.lib<s10_8pf.obj>(.text)
                            audio_lib.lib<c4_17pf.obj>(.text)
                            audio_lib.lib<qgain475.obj>(.text)
                            audio_lib.lib<c3_14pf.obj>(.text)
                            audio_lib.lib<c8_31pf.obj>(.text)
                            audio_lib.lib<c2_11pf.obj>(.text)
-                           audio_lib.lib<cbsearch.obj>(.text)
-                           audio_lib.lib<basicop2.obj>(.text)
                            /*
                            audio_lib.lib<pitch_fr.obj>(.text)
                            audio_lib.lib<g_pitch.obj>(.text)

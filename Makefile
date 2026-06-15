@@ -55,11 +55,13 @@ INCLUDES += --include_path="$(DSP_HEADERS_INC)"
 
 COMPILE_FLAGS := $(COMMON_FLAGS) $(INCLUDES) --preproc_with_compile
 
+# SOURCE_ASM_SRCS := $(wildcard source/*.asm)
 SOURCE_ASM_SRCS := \
 	source/DSP2833x_ADC_cal.asm \
 	source/DSP2833x_CodeStartBranch.asm \
 	source/DSP2833x_usDelay.asm
 
+# SOURCE_C_SRCS := $(wildcard source/*.c)
 SOURCE_C_SRCS := \
 	source/DSP2833x_CpuTimers.c \
 	source/DSP2833x_DefaultIsr.c \
@@ -94,6 +96,7 @@ CMD_SRCS := \
 	source/DSP2833x_Headers_nonBIOS.cmd \
 	source/F28335.cmd
 
+# LIB_SRCS := source/IQmath_fpu32.lib $(wildcard lib/release/lib/*.lib)
 LIB_SRCS := \
 	source/IQmath_fpu32.lib \
 	lib/release/lib/audio_lib.lib \
@@ -105,6 +108,7 @@ LIB_SRCS := \
 	lib/release/lib/uarta_lib.lib \
 	lib/release/lib/key_lib.lib
 
+# LIB_NAMES := -llibc.a $(LIB_SRCS:/lib/release/lib/%.lib=-l%.lib)
 LIB_NAMES := \
 	-llibc.a \
 	-lcodec_service_lib.lib \
@@ -121,9 +125,24 @@ TXT := $(BUILD_DIR)/$(PROJECT).txt
 MAP := $(BUILD_DIR)/$(PROJECT).map
 LINKINFO := $(BUILD_DIR)/$(PROJECT)_linkInfo.xml
 
-.PHONY: all clean help
+.PHONY: all baseline clean help libs profile
 
 all: $(TXT)
+
+baseline:
+	"$(MAKE)" -C lib clean
+	"$(MAKE)" -C lib all CG_TOOL_ROOT="$(CG_TOOL_ROOT)" AMR_PROFILE=0
+	"$(MAKE)" clean
+	"$(MAKE)" all CG_TOOL_ROOT="$(CG_TOOL_ROOT)"
+
+profile:
+	"$(MAKE)" -C lib clean
+	"$(MAKE)" -C lib all CG_TOOL_ROOT="$(CG_TOOL_ROOT)" AMR_PROFILE=1
+	"$(MAKE)" clean
+	"$(MAKE)" all CG_TOOL_ROOT="$(CG_TOOL_ROOT)"
+
+libs:
+	"$(MAKE)" -C lib all CG_TOOL_ROOT="$(CG_TOOL_ROOT)" AMR_PROFILE=0
 
 $(BUILD_DIR)/source/%.obj: source/%.c
 	@$(call make-dir,$(@D))
@@ -143,7 +162,11 @@ $(BUILD_DIR)/user/%.obj: user/%.c
 $(OUT): $(OBJS) $(CMD_SRCS) $(LIB_SRCS)
 	@$(call make-dir,$(@D))
 	@echo Building target: "$@"
-	"$(CL2000)" -v28 -ml -mt --float_support=fpu32 --advice:performance=all -g --c99 --diag_warning=225 --diag_wrap=off --display_error_number --abi=coffabi -z -m"$(MAP)" --stack_size=0x6000 --warn_sections -i"$(CG_TOOL_ROOT)/lib" -i"lib/release/lib" -i"$(CG_TOOL_ROOT)/include" --reread_libs --diag_wrap=off --display_error_number --xml_link_info="$(LINKINFO)" --rom_model -o "$(OUT)" $(OBJS) $(CMD_SRCS) $(LIB_SRCS) $(LIB_NAMES)
+	"$(CL2000)" -v28 -ml -mt --float_support=fpu32 --advice:performance=all -g --c99 --diag_warning=225 \
+	--diag_wrap=off --display_error_number --abi=coffabi -z -m"$(MAP)" --stack_size=0x6000 --warn_sections \
+	-i"$(CG_TOOL_ROOT)/lib" -i"lib/release/lib" -i"$(CG_TOOL_ROOT)/include" --reread_libs --diag_wrap=off \
+	--display_error_number --xml_link_info="$(LINKINFO)" --rom_model -o "$(OUT)" $(OBJS) $(CMD_SRCS) \
+	$(LIB_SRCS) $(LIB_NAMES)
 
 $(TXT): $(OUT)
 	@echo Building hex output: "$@"
@@ -155,5 +178,7 @@ clean:
 
 help:
 	@echo Portable build targets:
-	@echo   gmake all     Build $(OUT) and $(TXT)
-	@echo   gmake clean   Remove $(BUILD_DIR)
+	@echo   gmake all       Build $(OUT) and $(TXT) from current release libs
+	@echo   gmake baseline  Rebuild release libs with AMR_PROFILE=0, then build firmware
+	@echo   gmake profile   Rebuild release libs with AMR_PROFILE=1, then build firmware
+	@echo   gmake clean     Remove $(BUILD_DIR)

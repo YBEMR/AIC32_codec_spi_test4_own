@@ -102,3 +102,18 @@ student_release/lib
 
 ## 6. 下载程序
 python .\read_data1.py -p COM16 -w .\build\debug\AIC32_codec_spi_test4_own.txt
+
+
+gmake baseline CG_TOOL_ROOT=F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS
+
+gmake profile CG_TOOL_ROOT=F:/ti/CCS8.3/ccsv8/tools/compiler/ti-cgt-c2000_22.6.0.LTS
+
+
+open_loop   14.1 ms/frame  最大
+cbsearch     9.6 ms/frame
+cl_ltp       8.4 ms/frame
+lpc_lsp      6.7 ms/frame
+sf_pre       6.3 ms/frame
+gain         2.7 ms/frame
+
+

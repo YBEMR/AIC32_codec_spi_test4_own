@@ -1,5 +1,6 @@
 #include "audio.h"
 #include <string.h>
+#include "amr_profile.h"
 
 extern void UARTa_SendString(char *msg);
 extern void UARTa_SendStringAndNumber(char *msg1, int32 number, char *msg2);
@@ -8,11 +9,14 @@ extern void UARTa_SendStringAndNumber(char *msg1, int32 number, char *msg2);
 #define AMR_ENCODE_MODE MR515
 #endif
 
+#define AUDIO_APP_TICK_MS 10UL
+
 static audio_tick_getter_t audio_tick_getter = 0;
 
 void audio_set_tick_getter(audio_tick_getter_t getter)
 {
     audio_tick_getter = getter;
+    amr_prof_set_tick_getter((amr_prof_tick_getter_t)getter);
 }
 
 static Uint32 audio_get_time_ms(void)
@@ -21,7 +25,7 @@ static Uint32 audio_get_time_ms(void)
         return 0;
     }
 
-    return audio_tick_getter() * 10UL;
+    return audio_tick_getter() * AUDIO_APP_TICK_MS;
 }
 
 void I2CA_Init()
@@ -341,6 +345,7 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
     create_start_ms = audio_get_time_ms();
     __amr_encoder_create(&__encode_st, dtx, vad2);
     create_elapsed_ms = audio_get_time_ms() - create_start_ms;
+    amr_prof_reset();
 
     UARTa_SendStringAndNumber("AMR encode mode: ", (Uint32)mode_val, "\r\n");
 
@@ -394,6 +399,7 @@ int16_t amr_encode_pcm16(const int16_t *pcm_data, uint32_t sample_count,
     }
     UARTa_SendStringAndNumber("Encode create(ms): ", create_elapsed_ms, "\r\n");
     UARTa_SendStringAndNumber("Encode core(ms): ", core_elapsed_ms, "\r\n");
+    amr_prof_report(frame_count);
     UARTa_SendStringAndNumber("Encode pack(ms): ", pack_elapsed_ms, "\r\n");
     UARTa_SendStringAndNumber("Encode copy(ms): ", copy_elapsed_ms, "\r\n");
     return 0;

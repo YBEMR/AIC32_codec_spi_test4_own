@@ -12,6 +12,7 @@
 #include "pre_proc.h"
 #include "sid_sync.h"
 #include "e_homing.h"
+#include "amr_profile.h"
 
 struct amr_encoder_state {
 	cod_amrState		cod;
@@ -45,11 +46,14 @@ void amr_encode_frame(struct amr_encoder_state *st, enum Mode mode,
 	enum Mode used_mode;
 	enum TXFrameType tx_type;
 	Word16 i;
+	amr_prof_tick_t prof_start;
 
 	/* input */
+	prof_start = amr_prof_start();
 	for (i = 0; i < L_FRAME; i++)
 		new_speech[i] = pcm[i] & 0xFFF8;
 	Pre_Process(&st->pre, new_speech, L_FRAME);
+	amr_prof_add(AMR_PROF_PREPROCESS, prof_start);
 
 	/* main process */
 	cod_amr(&st->cod, mode, new_speech, frame->param, &used_mode, syn);
