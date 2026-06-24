@@ -248,7 +248,7 @@ int16_t main(int16_t argc, char **argv)
             continue;
         }
 
-        // 如果在这段时间按下按键会怎样
+        // 如果在这段时间松开按键会怎样
         // 会取消申请并清除相关的状态
         if (current_state == APP_STATE_FLOOR_WAIT_RESULT) {
             app_floor_wait_result_service();
@@ -704,6 +704,7 @@ static void app_floor_clear_packet(Uint16 *packet)
     }
 }
 
+// 小端格式填充
 static void app_floor_build_packet(Uint16 *packet, Uint16 type, Uint32 seq)
 {
     app_floor_clear_packet(packet);
@@ -768,6 +769,7 @@ static void app_floor_request_service(void)
     if (app_slave_spi_ready_is_active() == 0U) {
         if (app_floor_check_timeout(floor_req_start_us) != 0U) {
             floor_timeout_count++;
+            // 错误以后，回到IDLE状态，清除主机请求，等待下一次申请
             app_floor_abort_to_idle("Floor request timeout.\r\n");
         }
         return;
@@ -775,6 +777,7 @@ static void app_floor_request_service(void)
 
     now_us = app_get_us();
     floor_last_ready_wait_us = app_elapsed_us(floor_req_start_us, now_us);
+    // 完成一次SPI申请交互以后，立即清除主机请求线，以便完成SPI传输以后主机单方等待从机释放 SPI ready 的状态，避免后续状态机混乱
     app_master_data_req_set(0U);
     floor_req_active = 0U;
 

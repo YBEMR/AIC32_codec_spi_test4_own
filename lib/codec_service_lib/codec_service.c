@@ -310,6 +310,7 @@ int16_t codec_service_stream_record_sample(int16_t sample)
 
     stream_capture_frame[stream_capture_index++] = (int16)sample;
 
+    // 当捕获满一帧后，放入 PCM 环形缓冲区，并更新相关状态；未满一帧前一直等待。
     if (stream_capture_index < CODEC_SERVICE_STREAM_FRAME_SAMPLES) {
         return CODEC_SERVICE_OK;
     }
@@ -324,7 +325,7 @@ int16_t codec_service_stream_record_sample(int16_t sample)
     for (i = 0U; i < CODEC_SERVICE_STREAM_FRAME_SAMPLES; i++) {
         stream_pcm_frames[stream_pcm_write_index][i] = stream_capture_frame[i];
     }
-
+    // 环形缓冲区写入新帧数据，移动写指针并增加 PCM 帧计数
     stream_pcm_write_index =
             codec_service_stream_next_pcm_index(stream_pcm_write_index);
     stream_pcm_frame_count++;
