@@ -48,7 +48,7 @@ WD_DISABLE	.set	1		;set to 1 to disable WD, else set to 0
     .sect "codestart"
 
 code_start:
-    .if WD_DISABLE == 1
+    .if WD_DISABLE == 1     ;fefe
         LB wd_disable       ;Branch to watchdog disable code
     .else
         LB _c_int00         ;Branch to start of boot.asm in RTS library
